@@ -60,7 +60,7 @@ namespace CSharpLua {
     internal static string GlobalPackagesPath => _globalPackagesPath;
 
     internal static IEnumerable<NuGetVersion> GetAvailableVersions(string packageName) {
-      var packagePath = Path.Combine(_globalPackagesPath, packageName);
+      var packagePath = Path.Combine(_globalPackagesPath, packageName.ToLowerInvariant());
       // TODO: run package restore (always or only when directory doesn't exist?)
       if (!Directory.Exists(packagePath)) {
         yield break;
@@ -182,7 +182,7 @@ namespace CSharpLua {
         if (package.Value.Selected != null) {
           yield return new PackageReferenceModel {
             PackageName = package.Key,
-            PackagePath = Path.Combine(_globalPackagesPath, package.Key, package.Value.Selected.ToNormalizedString()),
+            PackagePath = Path.Combine(_globalPackagesPath, package.Key.ToLowerInvariant(), package.Value.Selected.ToNormalizedString()),
             FrameworkShortFolderName = package.Value.Framework.GetShortFolderName(),
             VersionNormalizedString = package.Value.Selected.ToNormalizedString(),
           };
@@ -194,7 +194,7 @@ namespace CSharpLua {
       var range = VersionRange.Parse(versionRange);
       var status = new VersionStatus(range);
       if (status.SelectBestMatch(packageName)) {
-        var packagePath = Path.Combine(_globalPackagesPath, packageName, status.Selected.ToNormalizedString());
+        var packagePath = Path.Combine(_globalPackagesPath, packageName.ToLowerInvariant(), status.Selected.ToNormalizedString());
         var frameworkFolderName = status.Framework?.GetShortFolderName();
         foreach (var lib in EnumerateLibs(packagePath, frameworkFolderName)) {
           yield return lib;
@@ -203,7 +203,7 @@ namespace CSharpLua {
     }
 
     internal static PackageDependencyGroup GetDependencyGroup(PackageIdentity package, NuGetFramework targetFramework) {
-      var nuspecFile = Path.Combine(_globalPackagesPath, package.Id, package.Version.ToNormalizedString(), $"{package.Id}.nuspec");
+      var nuspecFile = Path.Combine(_globalPackagesPath, package.Id.ToLowerInvariant(), package.Version.ToNormalizedString(), $"{package.Id.ToLowerInvariant()}.nuspec");
       if (!NuGet.Packaging.PackageHelper.IsNuspec(nuspecFile)) {
         throw new PackageException($"Could not locate the .nuspec file for package: {package}");
       }
