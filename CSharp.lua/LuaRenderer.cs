@@ -504,18 +504,26 @@ namespace CSharpLua {
       condition.Render(this);
       WriteSpace();
       Write(LuaSyntaxNode.Tokens.Then);
+      WriteNewLine();
+      AddIndent();
     }
 
     public void RenderElseIf(LuaExpressionSyntax condition) {
+      Outdent();
       Write(LuaSyntaxNode.Tokens.ElseIf);
       WriteSpace();
       condition.Render(this);
       WriteSpace();
       Write(LuaSyntaxNode.Tokens.Then);
+      WriteNewLine();
+      AddIndent();
     }
 
     public void RenderElse() {
+      Outdent();
       Write(LuaSyntaxNode.Tokens.Else);
+      WriteNewLine();
+      AddIndent();
     }
 
     public void RenderEnd() {
