@@ -604,9 +604,9 @@ namespace CSharpLua {
       return new LuaIdentifierLiteralExpressionSyntax("\"" + Utility.EscapeLuaString(value) + "\"");
     }
 
+    // A string the compiler writes by its value (a constant it folds, a caller's file path) is written for Lua as a literal is.
     private LuaIdentifierLiteralExpressionSyntax BuildStringLiteralExpression(string value) {
-      string text = SyntaxFactory.Literal(value).Text;
-      return new LuaIdentifierLiteralExpressionSyntax(text);
+      return BuildQuotedStringExpression(value);
     }
 
     // Lua reads every line end in a long string as \n, so a value with a \r is written as a quoted string.

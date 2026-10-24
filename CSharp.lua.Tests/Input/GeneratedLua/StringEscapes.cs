@@ -17,4 +17,8 @@ line";
   static string InterpVerbatim(int n) => $@"
 {n} \e";
   static string InterpRaw(int n) => $"""v {n} \e""";
+  const string Reset = "\x1b[0m";
+  static string Const() => Reset;
+  static string JoinedEscape() => "\e" + "y";
+  static string JoinedNul() => "b\0" + "2";
 }
