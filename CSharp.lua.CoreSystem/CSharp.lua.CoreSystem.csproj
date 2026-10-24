@@ -31,8 +31,8 @@
     <PackageReleaseNotes></PackageReleaseNotes>
 
     <PackageId>Moonwell.CSharpLua.CoreSystem</PackageId>
-    <Version>2.0.3-moonwell.1</Version>
-    <FileVersion>2.0.3.1</FileVersion>
+    <Version>2.0.3-moonwell.2</Version>
+    <FileVersion>2.0.3.2</FileVersion>
     <AssemblyVersion>2.0</AssemblyVersion>
   </PropertyGroup>
 
@@ -253,6 +253,12 @@
       <PackagePath>contentFiles/any/netstandard2.0/CoreSystem</PackagePath>
       <Pack>true</Pack>
     </Content>
+  </ItemGroup>
+
+  <!-- The licence, and the notice of the files this fork changed (Apache-2.0, section 4), go in the package. -->
+  <ItemGroup>
+    <None Include="../LICENSE" Pack="true" PackagePath="" Visible="false" />
+    <None Include="../NOTICE" Pack="true" PackagePath="" Visible="false" />
   </ItemGroup>
 
 </Project>

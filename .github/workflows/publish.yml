@@ -1,0 +1,64 @@
+# Publishes the fork's packages, Moonwell.CSharpLua and Moonwell.CSharpLua.CoreSystem, to nuget.org by trusted publishing,
+# as War3Net publishes its own: nuget.org trusts this workflow file (policy owner mdlsvensson, repository CSharp.lua, workflow
+# file publish.yml) and gives it a key for one hour, so no API key is stored. Run by hand, from moonwell-package only. The
+# versions are the ones in CSharp.lua/CSharp.lua.csproj and CSharp.lua.CoreSystem/CSharp.lua.CoreSystem.csproj; a version
+# already on nuget.org is skipped.
+name: Publish
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/moonwell-package'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          # The tests run on .NET 6; the newest SDK builds them.
+          dotnet-version: |
+            6.0.x
+            10.0.x
+
+      - name: Test
+        run: dotnet test CSharp.lua.Tests/CSharp.lua.Tests.csproj --configuration Debug --filter "Name!=TestCommonApi&Name!=TestCSharpLuaTemplateThroughPackage"
+
+      # A Release build writes each package (GeneratePackageOnBuild); dotnet pack stops on NU5026.
+      - name: Pack
+        shell: pwsh
+        run: |
+          dotnet build CSharp.lua/CSharp.lua.csproj -c Release --no-incremental
+          dotnet build CSharp.lua.CoreSystem/CSharp.lua.CoreSystem.csproj -c Release --no-incremental
+          New-Item -ItemType Directory -Force feed | Out-Null
+          Copy-Item CSharp.lua/bin/Release/*.nupkg, CSharp.lua/bin/Release/*.snupkg, CSharp.lua.CoreSystem/bin/Release/*.nupkg, CSharp.lua.CoreSystem/bin/Release/*.snupkg feed
+          $packages = @(Get-ChildItem feed -Filter *.nupkg)
+          if ($packages.Count -ne 2) { throw "Pack made $($packages.Count) packages, not 2" }
+          $packages | ForEach-Object { $_.Name }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: feed/*
+
+      - name: Log in to nuget.org
+        id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        # On Windows, dotnet nuget push expands a wildcard only after a backslash: feed/*.nupkg is "File does not exist".
+        run: dotnet nuget push "feed\*.nupkg" --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
