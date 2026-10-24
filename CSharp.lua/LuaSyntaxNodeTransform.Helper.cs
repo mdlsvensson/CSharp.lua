@@ -777,7 +777,8 @@ namespace CSharpLua {
       Contract.Assert(type != null);
       bool mayBeNull;
       if (type.IsValueType) {
-        mayBeNull = false;
+        // A nullable value is nil when it has none, and a value of a type parameter constrained to struct can be a bool: false.
+        mayBeNull = type.IsNullableType() || type.TypeKind == TypeKind.TypeParameter;
       } else if (type.IsStringType()) {
         var constValue = semanticModel_.GetConstantValue(expression);
         if (constValue.HasValue) {
