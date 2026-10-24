@@ -1148,6 +1148,10 @@ else
           s = System.Number.ToString(obj, f)
         else
           s = tostring(obj)
+          -- C# writes a whole float as 4, Lua as 4.0.
+          if s:find("^-?%d+%.0$") then
+            s = s:sub(1, -3)
+          end
         end
       elseif t == "table" then
         s = obj:ToString(f)

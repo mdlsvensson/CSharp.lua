@@ -66,6 +66,15 @@ local formats = {
   ['E'] = exponentialFormat
 }
 
+-- C# writes a whole float as 4, Lua as 4.0.
+local function numberToString(this)
+  local s = tostring(this)
+  if s:find("^-?%d+%.0$") then
+    s = s:sub(1, -3)
+  end
+  return s
+end
+
 local function toStringWithFormat(this, format)
   if #format ~= 0 then
     local i, j, x, n = format:find("^%s*([xXdDfFeE])(%d?)%s*$")
@@ -77,14 +86,14 @@ local function toStringWithFormat(this, format)
       return format:format(this)
     end
   end
-  return tostring(this)
+  return numberToString(this)
 end
 
 local function toString(this, format)
   if format then
     return toStringWithFormat(this, format)
   end
-  return tostring(this)
+  return numberToString(this)
 end
 
 local function compareInt(this, v)
@@ -328,7 +337,12 @@ local function parseDoubleWithException(s)
   end
 end
 
+local function zeroFloatFn()
+  return 0.0
+end
+
 local Single = define("System.Single", {
+  default = zeroFloatFn,
   Parse = function (s)
     local v = parseDoubleWithException(s)
     if v < -3.40282347E+38 or v > 3.40282347E+38 then
@@ -347,6 +361,7 @@ local Single = define("System.Single", {
 setmetatable(Single, Number)
 
 local Double = define("System.Double", {
+  default = zeroFloatFn,
   Parse = parseDoubleWithException,
   TryParse = function (s)
     local v = parseDouble(s)

@@ -1472,6 +1472,7 @@ namespace CSharpLua {
         expression = BuildConversionExpression(methodSymbol, expression);
         return;
       }
+      CheckFloatConversion(node, ref expression);
       // Roslyn 5.x reclassified the implicit T[] -> Span<T>/ReadOnlySpan<T> conversion so that it
       // is no longer reported as a user-defined conversion. Emit an explicit span construction so
       // the generated code passes a real Span/ReadOnlySpan instead of a bare array, which would
@@ -1490,6 +1491,62 @@ namespace CSharpLua {
       var typeExpression = GetTypeName(convertedType);
       var ctorArray = typeExpression.MemberAccess("ctorArray");
       return new LuaInvocationExpressionSyntax(ctorArray, expression);
+    }
+
+    // An integer made a float or double, as it is by being assigned, returned or given to a parameter of that type: Lua keeps an
+    // integer value as an integer, and does integer arithmetic on it.
+    private void CheckFloatConversion(ExpressionSyntax node, ref LuaExpressionSyntax expression) {
+      var typeInfo = semanticModel_.GetTypeInfo(node);
+      var type = typeInfo.Type;
+      var convertedType = typeInfo.ConvertedType;
+      if (type == null || convertedType == null || type.EQ(convertedType)) {
+        return;
+      }
+
+      bool isNullable = type.IsNullableType() || convertedType.IsNullableType();
+      var from = type.IsNullableType() ? type.NullableElementType() : type;
+      var to = convertedType.IsNullableType() ? convertedType.NullableElementType() : convertedType;
+      if (!from.IsCastIntegerType() || !to.IsDoubleOrFloatType(false)) {
+        return;
+      }
+
+      // Beside a float in an arithmetic operator or a comparison, the integer is made a float by Lua.
+      if (IsFloatOperand(node)) {
+        return;
+      }
+
+      var constValue = semanticModel_.GetConstantValue(node);
+      if (constValue.HasValue && constValue.Value != null) {
+        expression = to.SpecialType == SpecialType.System_Single
+          ? (LuaNumberLiteralExpressionSyntax)Convert.ToSingle(constValue.Value, CultureInfo.InvariantCulture)
+          : (LuaNumberLiteralExpressionSyntax)Convert.ToDouble(constValue.Value, CultureInfo.InvariantCulture);
+        return;
+      }
+
+      if (isNullable) {
+        expression = BuildNullableCastExpression(expression, type, convertedType) ?? expression;
+      } else {
+        expression = BuildFloatFromIntegerExpression(expression);
+      }
+    }
+
+    private static bool IsFloatOperand(ExpressionSyntax node) {
+      switch (node.Parent) {
+        case BinaryExpressionSyntax binary:
+          return binary.Kind() is SyntaxKind.AddExpression or SyntaxKind.SubtractExpression or SyntaxKind.MultiplyExpression
+            or SyntaxKind.DivideExpression or SyntaxKind.ModuloExpression or SyntaxKind.LessThanExpression
+            or SyntaxKind.LessThanOrEqualExpression or SyntaxKind.GreaterThanExpression or SyntaxKind.GreaterThanOrEqualExpression
+            or SyntaxKind.EqualsExpression or SyntaxKind.NotEqualsExpression;
+        case AssignmentExpressionSyntax assignment:
+          return assignment.Right == node && assignment.Kind() is SyntaxKind.AddAssignmentExpression or SyntaxKind.SubtractAssignmentExpression
+            or SyntaxKind.MultiplyAssignmentExpression or SyntaxKind.DivideAssignmentExpression or SyntaxKind.ModuloAssignmentExpression;
+        default:
+          return false;
+      }
+    }
+
+    private static LuaExpressionSyntax BuildFloatFromIntegerExpression(LuaExpressionSyntax expression) {
+      return expression.Binary(LuaSyntaxNode.Tokens.Plus, LuaNumberLiteralExpressionSyntax.ZeroFloat).Parenthesized();
     }
 
     private LuaExpressionSyntax GetOperatorMemberAccessExpression(IMethodSymbol methodSymbol) {
