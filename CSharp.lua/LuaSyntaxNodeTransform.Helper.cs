@@ -512,11 +512,11 @@ namespace CSharpLua {
           }
           case TypeCode.Single: {
             float v = (float)constantValue;
-            return (LuaFloatLiteralExpressionSyntax)v;
+            return new LuaFloatLiteralExpressionSyntax(v, true);
           }
           case TypeCode.Double: {
             double v = (double)constantValue;
-            return (LuaDoubleLiteralExpressionSyntax)v;
+            return new LuaDoubleLiteralExpressionSyntax(v, true);
           }
           case TypeCode.Int64: {
             if (constantValue is long.MinValue) {
@@ -1516,8 +1516,8 @@ namespace CSharpLua {
       var constValue = semanticModel_.GetConstantValue(node);
       if (constValue.HasValue && constValue.Value != null) {
         expression = to.SpecialType == SpecialType.System_Single
-          ? (LuaNumberLiteralExpressionSyntax)Convert.ToSingle(constValue.Value, CultureInfo.InvariantCulture)
-          : (LuaNumberLiteralExpressionSyntax)Convert.ToDouble(constValue.Value, CultureInfo.InvariantCulture);
+          ? new LuaFloatLiteralExpressionSyntax(Convert.ToSingle(constValue.Value, CultureInfo.InvariantCulture), true)
+          : new LuaDoubleLiteralExpressionSyntax(Convert.ToDouble(constValue.Value, CultureInfo.InvariantCulture), true);
         return;
       }
 
@@ -1528,7 +1528,13 @@ namespace CSharpLua {
       }
     }
 
-    private static bool IsFloatOperand(ExpressionSyntax node) {
+    // A user-defined operator is a call: its float parameter gets the integer as it is, so it is made a float as for any call.
+    private bool IsFloatOperand(ExpressionSyntax node) {
+      if (node.Parent is BinaryExpressionSyntax or AssignmentExpressionSyntax
+        && semanticModel_.GetSymbolInfo(node.Parent).Symbol is IMethodSymbol { MethodKind: MethodKind.UserDefinedOperator }) {
+        return false;
+      }
+
       switch (node.Parent) {
         case BinaryExpressionSyntax binary:
           return binary.Kind() is SyntaxKind.AddExpression or SyntaxKind.SubtractExpression or SyntaxKind.MultiplyExpression
@@ -1780,7 +1786,7 @@ namespace CSharpLua {
             return c;
           }
 
-          return Convert.ToDouble(constantValue.Value);
+          return new LuaDoubleLiteralExpressionSyntax(Convert.ToDouble(constantValue.Value), constantValue.Value is float or double);
         }
         return expression.AcceptExpression(this);
       }

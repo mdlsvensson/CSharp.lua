@@ -154,14 +154,15 @@ namespace CSharpLua.LuaAst {
   public abstract class LuaNumberLiteralExpressionSyntax : LuaLiteralExpressionSyntax {
     public abstract double Number { get; }
     public static readonly LuaNumberLiteralExpressionSyntax Zero = 0;
-    public static readonly LuaNumberLiteralExpressionSyntax ZeroFloat = 0.0;
+    public static readonly LuaNumberLiteralExpressionSyntax ZeroFloat = new LuaDoubleLiteralExpressionSyntax(0.0, true);
 
     internal override void Render(LuaRenderer renderer) {
       renderer.Render(this);
     }
 
     // Lua reads 4 as an integer and 4.0 as a float, and does integer arithmetic on the first (it wraps past 2^31): a whole float
-    // is written with a point. A text with an exponent, Infinity or NaN is left as it is.
+    // of the C# code is written with a point. A text with an exponent, Infinity or NaN is left as it is. A number the compiler
+    // makes itself (a default 0, a loop's step, an index) goes through the implicit operators and is written as it is.
     internal static string WithPoint(string text) {
       foreach (char c in text) {
         if (c != '-' && !char.IsDigit(c)) {
@@ -182,9 +183,12 @@ namespace CSharpLua.LuaAst {
 
   public sealed class LuaFloatLiteralExpressionSyntax : LuaNumberLiteralExpressionSyntax {
     private readonly float number_;
+    private readonly bool isFloatType_;
 
-    public LuaFloatLiteralExpressionSyntax(float number) {
+    /// <param name="isFloatType">The number is a float of the C# code, so a whole one is written with a point.</param>
+    public LuaFloatLiteralExpressionSyntax(float number, bool isFloatType = false) {
       number_ = number;
+      isFloatType_ = isFloatType;
     }
 
     public override double Number {
@@ -195,21 +199,26 @@ namespace CSharpLua.LuaAst {
 
     public override string Text {
       get {
-        return WithPoint(number_.ToString("G9", CultureInfo.InvariantCulture));
+        var text = number_.ToString("G9", CultureInfo.InvariantCulture);
+        return isFloatType_ ? WithPoint(text) : text;
       }
     }
   }
 
   public sealed class LuaDoubleLiteralExpressionSyntax : LuaNumberLiteralExpressionSyntax {
     public override double Number { get;}
+    private readonly bool isFloatType_;
 
-    public LuaDoubleLiteralExpressionSyntax(double number) {
+    /// <param name="isFloatType">The number is a float or double of the C# code, so a whole one is written with a point.</param>
+    public LuaDoubleLiteralExpressionSyntax(double number, bool isFloatType = false) {
       Number = number;
+      isFloatType_ = isFloatType;
     }
 
     public override string Text {
       get {
-        return WithPoint(Number.ToString("G17", CultureInfo.InvariantCulture));
+        var text = Number.ToString("G17", CultureInfo.InvariantCulture);
+        return isFloatType_ ? WithPoint(text) : text;
       }
     }
   }

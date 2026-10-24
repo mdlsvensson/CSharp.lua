@@ -514,14 +514,15 @@ namespace CSharpLua {
         function.AddStatements(block.Statements);
       } else {
         var type = (INamedTypeSymbol)semanticModel_.GetTypeInfo(body.Parent).ConvertedType;
-        var expression = body.AcceptExpression(this);
         var delegateInvokeMethod = type.DelegateInvokeMethod;
         if (delegateInvokeMethod == null) {
           // is System.Linq.Expressions
           var delegateType = (INamedTypeSymbol)type.TypeArguments.First();
           delegateInvokeMethod = delegateType.DelegateInvokeMethod;
         }
-        if (delegateInvokeMethod!.ReturnsVoid) {
+        // A value the lambda returns is converted to the delegate's return type (an integer returned as a float is made one).
+        var expression = delegateInvokeMethod!.ReturnsVoid ? body.AcceptExpression(this) : VisitExpression((ExpressionSyntax)body);
+        if (delegateInvokeMethod.ReturnsVoid) {
           if (expression != LuaExpressionSyntax.EmptyExpression) {
             function.AddStatement(expression);
           }

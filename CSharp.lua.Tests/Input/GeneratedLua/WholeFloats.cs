@@ -5,6 +5,40 @@ struct Point {
   public int N;
 }
 
+struct Scale {
+  public float Factor;
+  public static Scale operator *(Scale s, float by) => s;
+}
+
+enum Shade { Dark, Light }
+
+class Counts {
+  int tally;
+  static int total;
+  int Auto { get; set; }
+  Shade shade;
+
+  int Zero() {
+    int none = default;
+    return none + tally + total + Auto + (int)shade;
+  }
+
+  int Down(int n) {
+    int sum = 0;
+    for (int i = n - 1; i >= 0; i--) {
+      sum += i;
+    }
+    for (int j = 0; j <= n; j += 2) {
+      sum += j;
+    }
+    return sum;
+  }
+
+  static Scale Times(Scale s, int count) => s * count;
+  static Scale TimesTwo(Scale s) => s * 2;
+  static Func<float> Later(int amount) => () => amount;
+}
+
 class WholeFloats {
   const float K = 5f;
   const double D = 2d;
