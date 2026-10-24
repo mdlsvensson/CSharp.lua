@@ -21,6 +21,9 @@ jobs:
       run: dotnet clean --configuration Debug && dotnet nuget locals all --clear
     - name: Build with dotnet
       run: dotnet build --configuration Debug
-    - name: Run Test Case
-      run: cd test/ & test
-      shell: cmd
+    # The fork's tests (CSharp.lua.Tests), in place of test/test.bat, which loads CoreSystem under LuaJIT 2.0.2: Core.lua has
+    # Lua 5.3 operators (~, &, |) that LuaJIT cannot read, so that step fails before it tests anything.
+    # TestCommonApi and TestCSharpLuaTemplateThroughPackage are left out: they compile against War3Net.CodeAnalysis.Common and
+    # War3Api 1.32.0.4-beta1, which the repository does not restore.
+    - name: Run CSharp.lua.Tests
+      run: dotnet test CSharp.lua.Tests/CSharp.lua.Tests.csproj --configuration Debug --filter "Name!=TestCommonApi&Name!=TestCSharpLuaTemplateThroughPackage"
