@@ -80,7 +80,6 @@ namespace CSharpLua {
     }
 
     private static readonly Regex codeTemplateRegex_ = new(@"(,?\s*)\{(\*?[\w|`]+)\}", RegexOptions.Compiled);
-    private static readonly Regex unicodeRegex_ = new(@"\\u([0-9a-fA-F]{4})", RegexOptions.Compiled);
     private readonly Dictionary<ISymbol, LuaIdentifierNameSyntax> localReservedNames_ = new(SymbolEqualityComparer.Default);
     private readonly Dictionary<LuaFunctionExpressionSyntax, FunctionUpValuesInfo> functionUpValues_ = new();
     private int localMappingCounter_;
@@ -591,61 +590,18 @@ namespace CSharpLua {
       return null;
     }
 
-    private string DecodeUnicodeCharacter(string text) {
-      if (unicodeRegex_.IsMatch(text)) {
-        if (IsLuaClassic) {
-          return unicodeRegex_.Replace(text, m => {
-            if (ushort.TryParse(m.Groups[1].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var c)) {
-              char ch = (char)c;
-              switch (ch) {
-                case '\0': {
-                  return "\\0";
-                }
-                case '\a': {
-                  return "\\a";
-                }
-                case '\b': {
-                  return "\\b";
-                }
-                case '\f': {
-                  return "\\f";
-                }
-                case '\n': {
-                  return "\\n";
-                }
-                case '\r': {
-                  return "\\r";
-                }
-                case '\t': {
-                  return "\\t";
-                }
-                case '\v': {
-                  return "\\v";
-                }
-                case '\\': {
-                  return "\\";
-                }
-                case '"': {
-                  return "\\\"";
-                }
-              }
-              return ch.ToString();
-            }
-            return m.Value;
-          });
-        }
-
-        return unicodeRegex_.Replace(text, m => $@"\u{{{m.Groups[1].Value}}}");
-      }
-      return text;
-    }
-
     private LuaLiteralExpressionSyntax BuildStringLiteralTokenExpression(SyntaxToken token) {
       if (token.Text.Length > 0 && (token.Text[0] == '@' || token.Text.StartsWith("\"\"\""))) {
         return BuildVerbatimStringExpression(token.ValueText);
       }
 
-      return new LuaIdentifierLiteralExpressionSyntax(DecodeUnicodeCharacter(token.Text));
+      return BuildQuotedStringExpression(token.ValueText);
+    }
+
+    // The string as Lua reads it, built from its value: the escapes of a C# literal (\e, \U, \x of one to four digits, \0 before a
+    // digit) mean something else, or nothing, in Lua.
+    private static LuaIdentifierLiteralExpressionSyntax BuildQuotedStringExpression(string value) {
+      return new LuaIdentifierLiteralExpressionSyntax("\"" + Utility.EscapeLuaString(value) + "\"");
     }
 
     private LuaIdentifierLiteralExpressionSyntax BuildStringLiteralExpression(string value) {
@@ -653,8 +609,13 @@ namespace CSharpLua {
       return new LuaIdentifierLiteralExpressionSyntax(text);
     }
 
-    private LuaVerbatimStringLiteralExpressionSyntax BuildVerbatimStringExpression(string value) {
-      return new(value);
+    // Lua reads every line end in a long string as \n, so a value with a \r is written as a quoted string.
+    private LuaLiteralExpressionSyntax BuildVerbatimStringExpression(string value) {
+      if (value.Contains('\r')) {
+        return BuildQuotedStringExpression(value);
+      }
+
+      return new LuaVerbatimStringLiteralExpressionSyntax(value);
     }
 
     private LuaExpressionSyntax BuildUtf8StringLiteralExpression(LiteralExpressionSyntax node) {
@@ -667,7 +628,7 @@ namespace CSharpLua {
         return BuildVerbatimStringExpression(node.Token.ValueText);
       }
 
-      return new LuaIdentifierLiteralExpressionSyntax(DecodeUnicodeCharacter(text));
+      return BuildQuotedStringExpression(node.Token.ValueText);
     }
 
     private enum CallerAttributeKind {

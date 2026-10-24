@@ -120,6 +120,56 @@ namespace CSharpLua {
   }
 
   public static class Utility {
+    /// <summary>The text between the quotes of a Lua string that reads as <paramref name="value"/>.</summary>
+    public static string EscapeLuaString(string value) {
+      var sb = new StringBuilder(value.Length);
+      for (int i = 0; i < value.Length; ++i) {
+        char c = value[i];
+        switch (c) {
+          case '"':
+            sb.Append("\\\"");
+            break;
+          case '\\':
+            sb.Append("\\\\");
+            break;
+          case '\n':
+            sb.Append("\\n");
+            break;
+          case '\r':
+            sb.Append("\\r");
+            break;
+          case '\t':
+            sb.Append("\\t");
+            break;
+          case '\a':
+            sb.Append("\\a");
+            break;
+          case '\b':
+            sb.Append("\\b");
+            break;
+          case '\f':
+            sb.Append("\\f");
+            break;
+          case '\v':
+            sb.Append("\\v");
+            break;
+          default:
+            if (c < ' ' || c == '\x7f') {
+              // Three digits, so that a digit after it is not read as part of it.
+              sb.Append('\\').Append(((int)c).ToString("D3"));
+            } else if (char.IsHighSurrogate(c) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1])) {
+              sb.Append(c).Append(value[++i]);
+            } else if (char.IsSurrogate(c)) {
+              sb.Append("\\u{").Append(((int)c).ToString("X4")).Append('}');
+            } else {
+              sb.Append(c);
+            }
+            break;
+        }
+      }
+      return sb.ToString();
+    }
+
     public static T First<T>(this IList<T> list) {
       return list[0];
     }
