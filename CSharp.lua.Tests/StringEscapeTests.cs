@@ -50,5 +50,11 @@ namespace CSharpLua.Tests {
       var lua = Compiler.CompileSingleCode("class V { static string F() => @\"\r\nline\"; }");
       StringAssert.Contains(lua, "return \"\\r\\nline\"");
     }
+
+    [TestMethod]
+    public void TestInterpolatedStringIsIndexedAsAWhole() {
+      var lua = LuaOutput.Compile("StringOdd");
+      StringAssert.Contains(lua, "(\"a\" .. n):get(1)");
+    }
   }
 }
