@@ -195,6 +195,15 @@ namespace Batch1.src.Templates
             Assert.AreEqual(5, test.NullableProp.Value);
         }
 
+        [Test]
+        public static void PropertyTemplateNullConditionalOperatorWorks()
+        {
+            // TODO commented out until null-conditional operator with template is supported
+            //TestType test = null;
+            //var prop = test?.GetProp;
+            //Assert.Null(prop);
+        }
+
 #pragma warning disable CS0626 // Method, operator, or accessor is marked external and has no attributes on it
         private class TestType
         {

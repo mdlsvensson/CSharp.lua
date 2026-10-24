@@ -69,6 +69,7 @@ local function tryParseEnum(enumType, value, ignoreCase)
       return
     end
     for k, v in pairs(cls) do
+      local k = k
       if ignoreCase then
         k = k:lower()
       end
@@ -100,8 +101,9 @@ System.define("System.Enum", {
   GetName = function (enumType, value)
     if enumType == nil then throw(ArgumentNullException("enumType")) end
     if value == nil then throw(ArgumentNullException("value")) end
-    if not enumType:getIsEnum() then throw(ArgumentException("Arg_MustBeEnum")) end
-    for k, v in pairs(enumType[1]) do
+    local cls = enumType[1] or enumType
+    if cls.class ~= "E" then throw(ArgumentException("Arg_MustBeEnum")) end
+    for k, v in pairs(cls) do
       if v == value then
         return k
       end
@@ -109,10 +111,11 @@ System.define("System.Enum", {
   end,
   GetNames = function (enumType)
     if enumType == nil then throw(ArgumentNullException("enumType")) end
-    if not enumType:getIsEnum() then throw(ArgumentException("Arg_MustBeEnum")) end
+    local cls = enumType[1] or enumType
+    if cls.class ~= "E" then throw(ArgumentException("Arg_MustBeEnum")) end
     local t = {}
     local count = 1
-    for k, v in pairs(enumType[1]) do
+    for k, v in pairs(cls) do
       if type(v) == "number" then
         t[count] = k
         count = count + 1
@@ -122,10 +125,11 @@ System.define("System.Enum", {
   end,
   GetValues = function (enumType)
     if enumType == nil then throw(ArgumentNullException("enumType")) end
-    if not enumType:getIsEnum() then throw(ArgumentException("Arg_MustBeEnum")) end
+    local cls = enumType[1] or enumType
+    if cls.class ~= "E" then throw(ArgumentException("Arg_MustBeEnum")) end
     local t = {}
     local count = 1
-    for _, v in pairs(enumType[1]) do
+    for _, v in pairs(cls) do
       if type(v) == "number" then
         t[count] = v
         count = count + 1
@@ -136,8 +140,8 @@ System.define("System.Enum", {
   IsDefined = function (enumType, value)
     if enumType == nil then throw(ArgumentNullException("enumType")) end
     if value == nil then throw(ArgumentNullException("value")) end
-    if not enumType:getIsEnum() then throw(ArgumentException("Arg_MustBeEnum")) end
-    local cls = enumType[1]
+    local cls = enumType[1] or enumType
+    if cls.class ~= "E" then throw(ArgumentException("Arg_MustBeEnum")) end
     local t = type(value)
     if t == "string" then
       return cls[value] ~= nil

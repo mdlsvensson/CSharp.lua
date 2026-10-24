@@ -595,9 +595,12 @@ namespace CSharpLua {
       if (unicodeRegex_.IsMatch(text)) {
         if (IsLuaClassic) {
           return unicodeRegex_.Replace(text, m => {
-            if (short.TryParse(m.Groups[1].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var c)) {
+            if (ushort.TryParse(m.Groups[1].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var c)) {
               char ch = (char)c;
               switch (ch) {
+                case '\0': {
+                  return "\\0";
+                }
                 case '\a': {
                   return "\\a";
                 }
@@ -638,7 +641,7 @@ namespace CSharpLua {
     }
 
     private LuaLiteralExpressionSyntax BuildStringLiteralTokenExpression(SyntaxToken token) {
-      if (token.Text[0] == '@') {
+      if (token.Text.Length > 0 && (token.Text[0] == '@' || token.Text.StartsWith("\"\"\""))) {
         return BuildVerbatimStringExpression(token.ValueText);
       }
 
@@ -652,6 +655,19 @@ namespace CSharpLua {
 
     private LuaVerbatimStringLiteralExpressionSyntax BuildVerbatimStringExpression(string value) {
       return new(value);
+    }
+
+    private LuaExpressionSyntax BuildUtf8StringLiteralExpression(LiteralExpressionSyntax node) {
+      string text = node.Token.Text;
+      if (text.EndsWith("u8", StringComparison.OrdinalIgnoreCase)) {
+        text = text[..^2];
+      }
+
+      if (text.Length > 0 && (text[0] == '@' || text.StartsWith("\"\"\""))) {
+        return BuildVerbatimStringExpression(node.Token.ValueText);
+      }
+
+      return new LuaIdentifierLiteralExpressionSyntax(DecodeUnicodeCharacter(text));
     }
 
     private enum CallerAttributeKind {
@@ -1263,6 +1279,12 @@ namespace CSharpLua {
       var expressions = new List<LuaExpressionSyntax>();
       var attributes = attributeLists.SelectMany(i => i.Attributes);
       foreach (var node in attributes) {
+        // `MethodImplAttribute` is a compile-only hint with no runtime meaning in Lua and
+        // is not defined by CoreSystem, so skip it to avoid emitting a reference to an
+        // undefined symbol in the generated metadata.
+        if (semanticModel_.GetTypeInfo(node.Name).Type is INamedTypeSymbol attributeType && attributeType.IsMethodImplAttribute()) {
+          continue;
+        }
         var expression = node.AcceptExpression(this);
         if (expression != null) {
           expressions.Add(expression);
@@ -1486,7 +1508,26 @@ namespace CSharpLua {
     private void CheckConversion(ExpressionSyntax node, ref LuaExpressionSyntax expression) {
       if (semanticModel_.IsUserConversion(node, out var methodSymbol)) {
         expression = BuildConversionExpression(methodSymbol, expression);
+        return;
       }
+      // Roslyn 5.x reclassified the implicit T[] -> Span<T>/ReadOnlySpan<T> conversion so that it
+      // is no longer reported as a user-defined conversion. Emit an explicit span construction so
+      // the generated code passes a real Span/ReadOnlySpan instead of a bare array, which would
+      // otherwise crash the runtime (e.g. MemoryExtensions.Contains called on an array).
+      var typeInfo = semanticModel_.GetTypeInfo(node);
+      if (IsSpanConstructionConversion(typeInfo.Type, typeInfo.ConvertedType)) {
+        expression = BuildSpanConstructionExpression(typeInfo.ConvertedType, expression);
+      }
+    }
+
+    private static bool IsSpanConstructionConversion(ITypeSymbol originalType, ITypeSymbol convertedType) {
+      return originalType is IArrayTypeSymbol && convertedType.IsSpanOrReadOnlySpan();
+    }
+
+    private LuaExpressionSyntax BuildSpanConstructionExpression(ITypeSymbol convertedType, LuaExpressionSyntax expression) {
+      var typeExpression = GetTypeName(convertedType);
+      var ctorArray = typeExpression.MemberAccess("ctorArray");
+      return new LuaInvocationExpressionSyntax(ctorArray, expression);
     }
 
     private LuaExpressionSyntax GetOperatorMemberAccessExpression(IMethodSymbol methodSymbol) {
@@ -2159,7 +2200,9 @@ namespace CSharpLua {
 
       if (parameterList?.Parameters.Count > 0) {
         var parameters = new List<LuaIdentifierNameSyntax>();
-        if (invocation.Expression is LuaInternalMethodExpressionSyntax && prevMethodInfo.Symbol.IsStatic) {
+        if (symbol.IsStatic) {
+          // A static method has no `this` receiver, so do not bind one.
+        } else if (invocation.Expression is LuaInternalMethodExpressionSyntax && prevMethodInfo.Symbol.IsStatic) {
           parameters.Add(LuaIdentifierNameSyntax.This);
         }
         foreach (var parameterNode in parameterList.Parameters) {
@@ -2172,7 +2215,13 @@ namespace CSharpLua {
             }
           }
         }
-        var parameterValues = invocation.ArgumentList.Arguments.Where(i => i != LuaIdentifierNameSyntax.This);
+        // Bind the formal parameters to the actual arguments. Trailing `nil` arguments
+        // may have been trimmed (TryRemoveNilArgumentsAtTail) for an ordinary call, but
+        // here they are local initializers and must be present, so pad with `nil`.
+        var parameterValues = invocation.ArgumentList.Arguments.Where(i => i != LuaIdentifierNameSyntax.This).ToList();
+        while (parameterValues.Count < parameters.Count) {
+          parameterValues.Add(LuaIdentifierLiteralExpressionSyntax.Nil);
+        }
         block.AddStatement(new LuaLocalVariablesSyntax(parameters, parameterValues));
       }
 
@@ -2219,10 +2268,19 @@ namespace CSharpLua {
       }
 
       if (methodInfo.HasInlineGoto) {
-        block.Statements.Add(new LuaLabeledStatement(LuaIdentifierNameSyntax.InlineReturnLabel));
+        if (IsLuaClassic) {
+          // Lua 5.1 / LuaJIT does not support `goto`. Wrap the inline body in
+          // `repeat … until true` so the early-return `break` jumps to its end.
+          var repeatStatement = new LuaRepeatStatementSyntax(LuaIdentifierNameSyntax.One);
+          repeatStatement.Body.Statements.AddRange(block.Statements);
+          CurBlock.AddStatement(repeatStatement);
+        } else {
+          block.Statements.Add(new LuaLabeledStatement(LuaIdentifierNameSyntax.InlineReturnLabel));
+          CurBlock.AddStatement(block.Statements.Count == 1 ? block.Statements.First() : block);
+        }
+      } else {
+        CurBlock.AddStatement(block.Statements.Count == 1 ? block.Statements.First() : block);
       }
-
-      CurBlock.AddStatement(block.Statements.Count == 1 ? block.Statements.First() : block);
       if (methodInfo.InliningReturnVars.Count > 0) {
         inlineExpression = new LuaSequenceListExpressionSyntax(methodInfo.InliningReturnVars);
         if (refOrOutParameters.Count == 0 && root.Parent.IsKind(SyntaxKind.ExpressionStatement)) {
@@ -2411,6 +2469,9 @@ namespace CSharpLua {
         case SyntaxKind.IdentifierName: {
           var semanticModel = generator_.GetSemanticModel(expressionBody.SyntaxTree);
           var identifierSymbol = semanticModel.GetSymbolInfo(expressionBody).Symbol;
+          if (identifierSymbol is IParameterSymbol) {
+            return false;
+          }
           if (identifierSymbol is {IsStatic: true} && identifierSymbol.IsPrivate()) {
             return false;
           }

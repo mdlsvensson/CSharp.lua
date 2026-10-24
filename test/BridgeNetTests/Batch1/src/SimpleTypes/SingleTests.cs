@@ -107,7 +107,7 @@ namespace Bridge.ClientTest.SimpleTypes
         [Test]
         public void ToExponentialWorks()
         {
-#if __MOONJIT220__ || __LUA54__
+#if __MOONJIT220__ || __LUA54__ || __LUA55__
             Assert.AreEqual("1.230000e+02", ((float)123.0).ToExponential());
 #else
             Assert.AreEqual("1.230000e+002", ((float)123.0).ToExponential());
@@ -117,7 +117,7 @@ namespace Bridge.ClientTest.SimpleTypes
         [Test]
         public void ToExponentialWithFractionalDigitsWorks()
         {
-#if __MOONJIT220__ || __LUA54__
+#if __MOONJIT220__ || __LUA54__ || __LUA55__
           Assert.AreEqual("1.2e+02", ((float)123.0).ToExponential(1));
           
 #else
