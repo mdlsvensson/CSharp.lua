@@ -30,9 +30,9 @@
     <PackageTags>csharp lua compiler transpiler warcraft3 warcraft-iii</PackageTags>
     <PackageReleaseNotes></PackageReleaseNotes>
 
-    <PackageId>War3Net.CSharpLua.CoreSystem</PackageId>
-    <Version>2.0.3</Version>
-    <FileVersion>2.0.3</FileVersion>
+    <PackageId>Moonwell.CSharpLua.CoreSystem</PackageId>
+    <Version>2.0.3-moonwell.1</Version>
+    <FileVersion>2.0.3.1</FileVersion>
     <AssemblyVersion>2.0</AssemblyVersion>
   </PropertyGroup>
 
