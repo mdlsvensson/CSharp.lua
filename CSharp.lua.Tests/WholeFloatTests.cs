@@ -70,6 +70,35 @@ namespace CSharpLua.Tests {
     }
 
     [TestMethod]
+    public void TestIntegersStartAtIntegerZero() {
+      var lua = Lua();
+      // A field, a static field, an auto-property, an enum field, a struct's field and default(int).
+      foreach (var start in new[] { "tally = 0", "total = 0", "Auto = 0", "shade = 0", "N = 0", "local none = 0" }) {
+        Assert.IsTrue(System.Text.RegularExpressions.Regex.IsMatch(lua, @"\b" + start + @",?\r?\n"), start);
+      }
+    }
+
+    [TestMethod]
+    public void TestALoopsBoundsAndStepStayIntegers() {
+      var lua = Lua();
+      StringAssert.Contains(lua, "for i = n - 1, 0, -1 do");
+      StringAssert.Contains(lua, "for j = 0, n, 2 do");
+    }
+
+    [TestMethod]
+    public void TestAnIntegerGivenToAUserDefinedOperatorIsMadeAFloat() {
+      var lua = Lua();
+      StringAssert.Contains(lua, "op_Multiply(s, (count + 0.0))");
+      StringAssert.Contains(lua, "op_Multiply(s, 2.0)");
+    }
+
+    [TestMethod]
+    public void TestAnIntegerALambdaReturnsAsAFloatIsMadeAFloat() {
+      var lua = Lua();
+      StringAssert.Contains(lua, "return (amount + 0.0)");
+    }
+
+    [TestMethod]
     public void TestSingleAndDoubleStartAtFloatZero() {
       var output = CoreSystemLua.Run(@"
         print(math.type(System.Single:default()), math.type(System.Double:default()))
