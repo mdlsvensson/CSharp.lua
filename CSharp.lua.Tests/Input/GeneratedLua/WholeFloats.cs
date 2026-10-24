@@ -46,4 +46,11 @@ class WholeFloats {
   static float[] Array() => new float[] { 1f, 2f };
   static float Sum(params float[] values) => values[0];
   static float PassInt() => Sum(1, 2);
+  static float Each(int[] values) {
+    var total = 0f;
+    foreach (float value in values) {
+      total += value;
+    }
+    return total;
+  }
 }
