@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml.Linq;
 
 using Cake.Core;
 using Cake.Core.Diagnostics;
@@ -38,7 +39,12 @@ namespace CSharpLua {
     public static IEnumerable<(string folder, CustomProjectParserResult project)> EnumerateProjects(this CustomProjectParserResult mainProject) {
       var result = new Dictionary<string, CustomProjectParserResult>();
       void AddReferences(string folderPath, CustomProjectParserResult project) {
+        var notCompiled = GetReferencesNotCompiledAsSource(project);
         foreach (var referencedProject in project.ProjectReferences.Select(p => ParseProject(p.FilePath, folderPath, project.Configuration, project.Platform))) {
+          if (notCompiled.Contains(System.IO.Path.GetFullPath(referencedProject.ProjectFilePath.FullPath))) {
+            continue;
+          }
+
           var directory = referencedProject.GetDirectory();
           if (result.TryAdd(directory, referencedProject)) {
             AddReferences(directory, referencedProject);
@@ -53,6 +59,28 @@ namespace CSharpLua {
       foreach (var pair in result) {
         yield return (pair.Key, pair.Value);
       }
+    }
+
+    // A project reference that is an analyzer (OutputItemType="Analyzer") or has no output assembly (ReferenceOutputAssembly="false")
+    // brings no code into the one that references it, so its sources are not compiled with it.
+    private static HashSet<string> GetReferencesNotCompiledAsSource(CustomProjectParserResult project) {
+      var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      var projectFile = project.ProjectFilePath.FullPath;
+      var document = XDocument.Load(projectFile);
+      string Metadata(XElement reference, string name) => reference.Attribute(name)?.Value ?? reference.Element(name)?.Value;
+      foreach (var reference in document.Descendants().Where(i => i.Name.LocalName == "ProjectReference")) {
+        var include = reference.Attribute("Include")?.Value;
+        if (string.IsNullOrEmpty(include) || include.Contains("$(")) {
+          continue;
+        }
+
+        bool isAnalyzer = string.Equals(Metadata(reference, "OutputItemType"), "Analyzer", StringComparison.OrdinalIgnoreCase);
+        bool hasNoAssembly = string.Equals(Metadata(reference, "ReferenceOutputAssembly"), "false", StringComparison.OrdinalIgnoreCase);
+        if (isAnalyzer || hasNoAssembly) {
+          references.Add(System.IO.Path.GetFullPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(projectFile), include.Replace('\\', System.IO.Path.DirectorySeparatorChar))));
+        }
+      }
+      return references;
     }
 
     public static string GetDirectory(this CustomProjectParserResult project) {
