@@ -64,6 +64,12 @@ namespace CSharpLua.Tests {
     }
 
     [TestMethod]
+    public void TestIntegersTakenAsFloatsInAForeachAreMadeFloats() {
+      var lua = Lua();
+      StringAssert.Contains(lua, "value = (value + 0.0)");
+    }
+
+    [TestMethod]
     public void TestSingleAndDoubleStartAtFloatZero() {
       var output = CoreSystemLua.Run(@"
         print(math.type(System.Single:default()), math.type(System.Double:default()))

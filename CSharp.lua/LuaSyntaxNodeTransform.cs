@@ -5193,7 +5193,10 @@ namespace CSharpLua {
       bool hasCast = false;
       var elementType = !isAsync ? sourceType.GetIEnumerableElementType() : sourceType.GetIAsyncEnumerableElementType();
       if (elementType != null) {
-        if (!elementType.EQ(targetType) && !elementType.Is(targetType)) {
+        if (elementType.IsCastIntegerType() && targetType.IsDoubleOrFloatType(false)) {
+          // The integers of the collection are taken as floats, which Lua does not do on its own.
+          forInStatement.Body.AddStatement(identifier.Assignment(BuildFloatFromIntegerExpression(identifier)));
+        } else if (!elementType.EQ(targetType) && !elementType.Is(targetType)) {
           hasCast = true;
         }
       } else {
