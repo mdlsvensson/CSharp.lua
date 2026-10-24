@@ -4295,8 +4295,17 @@ namespace CSharpLua {
         return BuildEnumToStringExpression(enumTypeSymbol, isNullable, original, expression);
       }
 
+      if (typeInfo.IsNullableType(out var nullableElementType)) {
+        return WrapNullableStringConcatExpression(original, nullableElementType, format, alignment);
+      }
+
       if (typeInfo.IsValueType) {
         if (alignment == null) {
+          var formatMethod = format != null ? GetFormatToStringMethod(typeInfo) : null;
+          if (formatMethod != null) {
+            return BuildFormatToStringExpression(original, formatMethod, format);
+          }
+
           var invocation = original.MemberAccess(LuaIdentifierNameSyntax.ToStr, true).Invocation();
           if (format != null) {
             invocation.AddArgument(format);
@@ -4306,6 +4315,50 @@ namespace CSharpLua {
       }
 
       return FormatAlignment(original, format, alignment);
+    }
+
+    // A nullable value made text: "" when it is nil. A value's own ToString is a method of the Lua value, which a number or a
+    // boolean has only where the core gives it one through debug.setmetatable, and nil never has one, so System.toString
+    // (which looks at the type of the value) is called instead.
+    private LuaExpressionSyntax WrapNullableStringConcatExpression(LuaExpressionSyntax original, ITypeSymbol elementType, LuaExpressionSyntax format, LuaExpressionSyntax alignment) {
+      if (elementType.SpecialType == SpecialType.System_Char) {
+        // System.toString gives the code of a char; a char? gives the character, as a char does (a format is left out for it).
+        var character = BuildCodeTemplateExpression(
+          "(function(c) if c == nil then return \"\" end return string.char(c) end)({0})", new[] { original }, null);
+        return alignment == null ? character : FormatAlignment(character, null, alignment);
+      }
+
+      var formatMethod = format != null && alignment == null ? GetFormatToStringMethod(elementType) : null;
+      if (formatMethod != null) {
+        var providerArgument = formatMethod.Parameters.Length == 2 ? ", nil" : string.Empty;
+        return BuildCodeTemplateExpression(
+          "(function(s, f) if s == nil then return \"\" end return s:{2}(f" + providerArgument + ") end)({0}, {1})",
+          new[] { original, format, GetMemberName(formatMethod) }, null);
+      }
+
+      return FormatAlignment(original, format, alignment);
+    }
+
+    // The ToString(string) or ToString(string, IFormatProvider) of a struct of the code that implements IFormattable, which a
+    // format reaches: CSharp.lua numbers the overloads of ToString, and a call by name reaches the first.
+    private IMethodSymbol GetFormatToStringMethod(ITypeSymbol type) {
+      if (type.TypeKind != TypeKind.Struct || !generator_.IsFromCode(type) || !type.AllInterfaces.Any(i => i.SpecialType == SpecialType.None && i.Name == "IFormattable" && i.ContainingNamespace.ToString() == "System")) {
+        return null;
+      }
+
+      return type.GetMembers("ToString").OfType<IMethodSymbol>().FirstOrDefault(i =>
+        !i.IsStatic && i.DeclaredAccessibility == Accessibility.Public
+        && i.Parameters.Length is 1 or 2
+        && i.Parameters[0].Type.SpecialType == SpecialType.System_String
+        && (i.Parameters.Length == 1 || i.Parameters[1].Type.Name == "IFormatProvider"));
+    }
+
+    private LuaExpressionSyntax BuildFormatToStringExpression(LuaExpressionSyntax original, IMethodSymbol method, LuaExpressionSyntax format) {
+      var invocation = original.MemberAccess(GetMemberName(method), true).Invocation(format);
+      if (method.Parameters.Length == 2) {
+        invocation.AddArgument(LuaIdentifierLiteralExpressionSyntax.Nil);
+      }
+      return invocation;
     }
 
     private LuaInvocationExpressionSyntax FormatAlignment(LuaExpressionSyntax e, LuaExpressionSyntax format, LuaExpressionSyntax alignment) {

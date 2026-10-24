@@ -49,6 +49,18 @@ namespace CSharpLua {
     }
 
     /// <summary>
+    /// Compiles one piece of code with the settings of a game's script, which has no debug library: a number or a boolean has
+    /// no methods there, so a value made text is written with System.toString.
+    /// </summary>
+    public static string CompileSingleCodeForGame(string code) {
+      var codes = new (string, string)[] { (code, "") };
+      var generator = new LuaSyntaxGenerator(codes, GetSystemLibs(), null, Array.Empty<string>(), new LuaSyntaxGenerator.SettingInfo {
+        IsPreventDebugObject = true,
+      });
+      return generator.GenerateSingle();
+    }
+
+    /// <summary>
     /// for Blazor to use
     /// </summary>
     public static string CompileSingleCode(string code, IEnumerable<Stream> libs, IEnumerable<Stream> metas) {
