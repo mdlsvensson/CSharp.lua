@@ -55,7 +55,15 @@ namespace CSharpLua {
   }
 
   public static class PackageHelper {
-    private static readonly string _globalPackagesPath = Path.Combine(NuGetEnvironment.GetFolderPath(NuGetFolderPath.NuGetHome), SettingsUtility.DefaultGlobalPackagesFolderPath);
+    private static readonly string _globalPackagesPath = GetGlobalPackagesPath();
+
+    /// <summary>
+    /// The folder NuGet restores packages to: NUGET_PACKAGES when it is set, else the globalPackagesFolder of the NuGet.Config files, else
+    /// ~/.nuget/packages.
+    /// </summary>
+    public static string GetGlobalPackagesPath() {
+      return SettingsUtility.GetGlobalPackagesFolder(Settings.LoadDefaultSettings(root: null));
+    }
 
     internal static string GlobalPackagesPath => _globalPackagesPath;
 
