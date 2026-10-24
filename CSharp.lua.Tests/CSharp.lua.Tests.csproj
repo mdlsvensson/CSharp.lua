@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CSharp.lua\CSharp.lua.csproj" />
+    <ProjectReference Include="..\CSharp.lua.CoreSystem\CSharp.lua.CoreSystem.csproj" />
   </ItemGroup>
 
 </Project>

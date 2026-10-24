@@ -160,6 +160,17 @@ namespace CSharpLua.LuaAst {
       renderer.Render(this);
     }
 
+    // Lua reads 4 as an integer and 4.0 as a float, and does integer arithmetic on the first (it wraps past 2^31): a whole float
+    // is written with a point. A text with an exponent, Infinity or NaN is left as it is.
+    internal static string WithPoint(string text) {
+      foreach (char c in text) {
+        if (c != '-' && !char.IsDigit(c)) {
+          return text;
+        }
+      }
+      return text + ".0";
+    }
+
     public static implicit operator LuaNumberLiteralExpressionSyntax(float number) {
       return new LuaFloatLiteralExpressionSyntax(number);
     }
@@ -184,7 +195,7 @@ namespace CSharpLua.LuaAst {
 
     public override string Text {
       get {
-        return number_.ToString("G9", CultureInfo.InvariantCulture);
+        return WithPoint(number_.ToString("G9", CultureInfo.InvariantCulture));
       }
     }
   }
@@ -198,7 +209,7 @@ namespace CSharpLua.LuaAst {
 
     public override string Text {
       get {
-        return Number.ToString("G17", CultureInfo.InvariantCulture);
+        return WithPoint(Number.ToString("G17", CultureInfo.InvariantCulture));
       }
     }
   }

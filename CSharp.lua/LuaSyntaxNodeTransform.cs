@@ -3461,6 +3461,7 @@ namespace CSharpLua {
           } else {
             int len = value.Length;
             int removeCount = 0;
+            bool isFloatSuffix = false;
             switch (value[len - 1]) {
               case 'f':
               case 'F':
@@ -3472,6 +3473,7 @@ namespace CSharpLua {
                     hasTransform = true;
                   } else {
                     removeCount = 1;
+                    isFloatSuffix = true;
                   }
                 }
                 break;
@@ -3496,6 +3498,9 @@ namespace CSharpLua {
             }
             if (removeCount > 0) {
               value = value.Remove(len - removeCount);
+              if (isFloatSuffix) {
+                value = LuaNumberLiteralExpressionSyntax.WithPoint(value);
+              }
             }
           }
           if (hasTransform) {
@@ -4156,6 +4161,10 @@ namespace CSharpLua {
           return original;
         }
         case >= SpecialType.System_SByte and <= SpecialType.System_Double:
+          if (format == null && alignment == null && typeInfo.IsDoubleOrFloatType(false)) {
+            // Lua writes a whole float as 4.0, and C# as 4.
+            return FormatAlignment(original, null, null);
+          }
           if (format != null || alignment != null) {
             if (IsPreventDebug) {
               return FormatAlignment(original, format, alignment);
@@ -5313,7 +5322,7 @@ namespace CSharpLua {
         }
       } else if (originalType.IsCastIntegerType()) {
         if (targetType.IsDoubleOrFloatType(false)) {
-          return expression;
+          return BuildFloatFromIntegerExpression(expression);
         }
       } else if (targetType.SpecialType == SpecialType.System_Single && originalType.SpecialType == SpecialType.System_Double) {
         return GetCastToNumberExpression(expression, targetType, true);
