@@ -198,6 +198,25 @@ namespace TestCases
                 Console.WriteLine(i);
             }
         }
+        [TestCase]
+        public static void Test16()
+        {
+            // Regression for issue #463: Enum.GetValues<T>() must not throw
+            // "attempt to call a nil value (method 'getIsEnum')".
+            var values = Enum.GetValues<TestEnum>();
+            foreach (var v in values)
+            {
+                Console.WriteLine(v.ToString());
+            }
+
+            var names = Enum.GetNames<TestEnum>();
+            foreach (var n in names)
+            {
+                Console.WriteLine(n);
+            }
+
+            Console.WriteLine(string.Join(", ", Enum.GetValues<TestEnum4>()));
+        }
         class SystemType
         {
             public int value = 10;

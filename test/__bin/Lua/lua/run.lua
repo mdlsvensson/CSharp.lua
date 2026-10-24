@@ -9,6 +9,7 @@ local luaVersions = {
   { "MoonJIT-2.2.0", "__MOONJIT220__" },
   { "Lua5.3", "__LUA53__" },
   { "Lua5.4", "__LUA54__" },
+  { "Lua5.5", "__LUA55__" },
 }
 
 publishOutputDir = "bin/Debug/PublishOutput/"
