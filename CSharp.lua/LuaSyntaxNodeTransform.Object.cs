@@ -1295,7 +1295,7 @@ namespace CSharpLua {
       }
 
       var resultExpression = (LuaExpressionSyntax)expressions.Aggregate(ConcatInterpolatedString);
-      if (node.Parent.IsKind(SyntaxKind.SimpleMemberAccessExpression)) {
+      if (node.Parent.IsKind(SyntaxKind.SimpleMemberAccessExpression) || node.Parent.IsKind(SyntaxKind.ElementAccessExpression)) {
         resultExpression = resultExpression.Parenthesized();
       }
       return resultExpression;
