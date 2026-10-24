@@ -1240,8 +1240,9 @@ namespace CSharpLua {
       var expressions = new List<LuaExpressionSyntax>();
       foreach (var content in node.Contents) {
         if (content.IsKind(SyntaxKind.InterpolatedStringText)) {
-          var identifier = content.Accept<LuaIdentifierNameSyntax>(this);
-          sb.Append(identifier.ValueText);
+          // The text is the format string of string.format: a % in it is written %%.
+          var text = ((InterpolatedStringTextSyntax)content).TextToken.ValueText.Replace("{{", "{").Replace("}}", "}");
+          sb.Append(text.Replace("%", "%%"));
         } else {
           var interpolation = (InterpolationSyntax)content;
           var expression = WrapStringConcatExpression(interpolation.Expression);
@@ -1268,7 +1269,7 @@ namespace CSharpLua {
     }
 
     public override LuaSyntaxNode VisitInterpolationFormatClause(InterpolationFormatClauseSyntax node) {
-      return  new LuaStringLiteralExpressionSyntax(node.FormatStringToken.ValueText);
+      return new LuaStringLiteralExpressionSyntax(Utility.EscapeLuaString(node.FormatStringToken.ValueText));
     }
 
     public override LuaSyntaxNode VisitInterpolationAlignmentClause(InterpolationAlignmentClauseSyntax node) {
@@ -1313,7 +1314,7 @@ namespace CSharpLua {
 
     public override LuaSyntaxNode VisitInterpolatedStringText(InterpolatedStringTextSyntax node) {
       string text = node.TextToken.ValueText.Replace("{{", "{").Replace("}}", "}");
-      return (LuaIdentifierNameSyntax)text;
+      return (LuaIdentifierNameSyntax)Utility.EscapeLuaString(text);
     }
 
     public override LuaSyntaxNode VisitAliasQualifiedName(AliasQualifiedNameSyntax node) {
