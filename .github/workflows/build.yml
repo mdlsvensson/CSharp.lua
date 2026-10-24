@@ -12,10 +12,11 @@ jobs:
     - name: Setup dotnet
       uses: actions/setup-dotnet@v4
       with:
-        # .NET 11 is still a preview SDK; include-prerelease is required to install it.
-        # Keep this in sync with <TargetFramework> in CSharp.lua.Launcher/CSharp.lua.Launcher.csproj.
-        dotnet-version: '11.0.x'
-        include-prerelease: true
+        # The launcher and the tests run on .NET 6 (<TargetFramework> in CSharp.lua.Launcher/CSharp.lua.Launcher.csproj);
+        # the newest SDK builds them.
+        dotnet-version: |
+          6.0.x
+          10.0.x
     - name: clear
       run: dotnet clean --configuration Debug && dotnet nuget locals all --clear
     - name: Build with dotnet

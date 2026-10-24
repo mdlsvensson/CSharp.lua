@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Owners>Drake53</Owners>
+    <Owners>mdlsvensson</Owners>
     <Copyright>Copyright © YANG Huan 2017</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -19,14 +19,14 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
-    <RepositoryUrl>https://github.com/Drake53/CSharp.lua</RepositoryUrl>
+    <RepositoryUrl>https://github.com/mdlsvensson/CSharp.lua</RepositoryUrl>
   </PropertyGroup>
 
   <PropertyGroup>
-    <Authors>YANG Huan, Drake53</Authors>
+    <Authors>YANG Huan, Drake53, mdlsvensson</Authors>
 
-    <Description>The lua system files for Csharp.lua.</Description>
-    <PackageProjectUrl>https://github.com/Drake53/CSharp.lua/tree/master/CSharp.lua.CoreSystem</PackageProjectUrl>
+    <Description>The lua system files for Moonwell's fork of Csharp.lua.</Description>
+    <PackageProjectUrl>https://github.com/mdlsvensson/CSharp.lua/tree/moonwell-package/CSharp.lua.CoreSystem</PackageProjectUrl>
     <PackageTags>csharp lua compiler transpiler warcraft3 warcraft-iii</PackageTags>
     <PackageReleaseNotes></PackageReleaseNotes>
 

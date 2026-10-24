@@ -13,7 +13,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Owners>Drake53</Owners>
+    <Owners>mdlsvensson</Owners>
     <Copyright>Copyright © YANG Huan 2017</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
@@ -21,20 +21,20 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
 
-    <RepositoryUrl>https://github.com/Drake53/CSharp.lua</RepositoryUrl>
+    <RepositoryUrl>https://github.com/mdlsvensson/CSharp.lua</RepositoryUrl>
   </PropertyGroup>
 
   <PropertyGroup>
-    <Authors>YANG Huan, Drake53</Authors>
+    <Authors>YANG Huan, Drake53, mdlsvensson</Authors>
 
-    <Description>The C# to Lua compiler, with edits to make it compatible with warcraft III lua maps.</Description>
-    <PackageProjectUrl>https://github.com/Drake53/CSharp.lua/tree/master/CSharp.lua</PackageProjectUrl>
+    <Description>Moonwell's fork of the C# to Lua compiler, from Drake53's edits to make it compatible with warcraft III lua maps.</Description>
+    <PackageProjectUrl>https://github.com/mdlsvensson/CSharp.lua/tree/moonwell-package/CSharp.lua</PackageProjectUrl>
     <PackageTags>csharp lua compiler transpiler warcraft3 warcraft-iii</PackageTags>
     <PackageReleaseNotes></PackageReleaseNotes>
 
     <PackageId>Moonwell.CSharpLua</PackageId>
-    <Version>2.0.4-moonwell.7</Version>
-    <FileVersion>2.0.4.7</FileVersion>
+    <Version>2.0.4-moonwell.8</Version>
+    <FileVersion>2.0.4.8</FileVersion>
     <AssemblyVersion>2.0</AssemblyVersion>
   </PropertyGroup>
 
