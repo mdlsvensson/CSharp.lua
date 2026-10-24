@@ -27,6 +27,15 @@ namespace CSharpLua.Tests {
     }
 
     [TestMethod]
+    public void TestAFoldedConstantIsWrittenForLua() {
+      // A const string and literals joined with + are written by their value, which CSharp.lua folds.
+      var lua = LuaOutput.Compile("StringEscapes");
+      StringAssert.Contains(lua, "return \"\\027[0m\"");
+      StringAssert.Contains(lua, "return \"\\027y\"");
+      StringAssert.Contains(lua, "return \"b\\0002\"");
+    }
+
+    [TestMethod]
     public void TestRawStringIsAString() {
       var lua = LuaOutput.Compile("StringEscapes");
       StringAssert.Contains(lua, "return [[raw \"text\"]]");
