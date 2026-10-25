@@ -63,6 +63,11 @@ namespace CSharpLua.LuaAst {
   public sealed class LuaConstructorAdapterExpressionSyntax : LuaFunctionExpressionSyntax {
     public bool IsInvokeThisCtor { get; set; }
     public bool IsStatic { get; set; }
+    /// <summary>The statement the type's field initializers go after: a primary constructor keeps its parameters first.</summary>
+    public LuaStatementSyntax InitAfter { get; set; }
+
+    /// <summary>Where in the body the type's field initializers go.</summary>
+    public int InitIndex => InitAfter != null ? Body.Statements.IndexOf(InitAfter) + 1 : 0;
   }
 
   public abstract class LuaCheckLoopControlExpressionSyntax : LuaFunctionExpressionSyntax {

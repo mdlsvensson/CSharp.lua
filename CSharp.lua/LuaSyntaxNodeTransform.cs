@@ -471,6 +471,25 @@ namespace CSharpLua {
       function.AddParameter(LuaIdentifierNameSyntax.This);
       function.AddParameters(parameterList.Parameters);
 
+      // The parameters are kept first, as C# does: the field initializers, put after them, and the base constructor read them.
+      var ctor = typeSymbol.InstanceConstructors.FirstOrDefault() ?? typeSymbol.Constructors.FirstOrDefault();
+      if (ctor != null) {
+        int index = 0;
+        foreach (var p in ctor.Parameters) {
+          if (index < parameterList.Parameters.Count) {
+            var parameterName = parameterList.Parameters[index];
+            LuaStatementSyntax keep = LuaIdentifierNameSyntax.This.MemberAccess(parameterName).Assignment(parameterName);
+            function.AddStatement(keep);
+            function.InitAfter = keep;
+            var expression = GetFieldValueExpression(p.Type, null, out bool isLiteral, out _);
+            if (expression != null) {
+              typeDeclaration.AddField(parameterName, expression, p.Type.IsImmutable() && isLiteral, false, false, true, null, false, false);
+            }
+          }
+          ++index;
+        }
+      }
+
       if (!typeSymbol.IsValueType && typeSymbol.BaseType != null) {
         var primaryBase = node.BaseList?.Types.OfType<PrimaryConstructorBaseTypeSyntax>().FirstOrDefault();
         if (primaryBase != null) {
@@ -492,21 +511,6 @@ namespace CSharpLua {
       }
 
       typeDeclaration.AddCtor(function, false);
-      var ctor = typeSymbol.InstanceConstructors.FirstOrDefault() ?? typeSymbol.Constructors.FirstOrDefault();
-      if (ctor != null) {
-        int index = 0;
-        foreach (var p in ctor.Parameters) {
-          if (index < parameterList.Parameters.Count) {
-            var parameterName = parameterList.Parameters[index];
-            function.AddStatement(LuaIdentifierNameSyntax.This.MemberAccess(parameterName).Assignment(parameterName));
-            var expression = GetFieldValueExpression(p.Type, null, out bool isLiteral, out _);
-            if (expression != null) {
-              typeDeclaration.AddField(parameterName, expression, p.Type.IsImmutable() && isLiteral, false, false, true, null, false, false);
-            }
-          }
-          ++index;
-        }
-      }
     }
 
     private static bool IsInsidePrimaryConstructor(SyntaxNode node) {
