@@ -39,6 +39,12 @@ namespace CSharpLua.LuaAst {
         : new LuaInvocationExpressionSyntax(LuaIdentifierNameSyntax.Each, expression);
     }
 
+    /// <summary>A loop over an iterator function, state and start value already kept in locals.</summary>
+    public LuaForInStatementSyntax(LuaIdentifierNameSyntax identifier, LuaSequenceListExpressionSyntax iterator) {
+      Identifier = identifier ?? throw new ArgumentNullException(nameof(identifier));
+      Expression = iterator ?? throw new ArgumentNullException(nameof(iterator));
+    }
+
     internal override void Render(LuaRenderer renderer) {
       renderer.Render(this);
     }

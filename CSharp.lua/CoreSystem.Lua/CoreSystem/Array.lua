@@ -130,6 +130,20 @@ local function each(t)
   return eachFn, en
 end
 
+-- A foreach left early (a break, a return) disposes its enumerator, the second value of each, as C# does.
+local function dispose(en)
+  local f = en.Dispose
+  if f ~= nil then
+    f(en)
+  end
+end
+
+-- Disposes the enumerator after the values a return gives are worked out, and gives them back.
+local function disposeOf(en, ...)
+  dispose(en)
+  return ...
+end
+
 function System.isArrayLike(t)
   return type(t) == "table" and t.GetEnumerator == arrayEnumerator
 end
@@ -152,6 +166,8 @@ end
 System.null = null
 System.Void = null
 System.each = each
+System.dispose = dispose
+System.disposeOf = disposeOf
 System.ipairs = ipairs
 System.throwFailedVersion = throwFailedVersion
 
@@ -1703,10 +1719,26 @@ local function createCoroutine(f)
   return c
 end
 
+-- Given to an iterator suspended at a yield when its enumerator is disposed: the yield raises it, so the iterator leaves
+-- through its finally blocks, as C# runs them when a foreach is left early.
+local disposed = {}
+
+local function checkDisposed(signal, ...)
+  if signal == disposed then
+    error(disposed)
+  end
+  return signal, ...
+end
+
+local function yield(...)
+  return checkDisposed(cyield(...))
+end
+
 System.ccreate = createCoroutine
 System.cpool = cpool
 System.cresume = cresume
-System.yield = cyield
+System.cyield = cyield
+System.yield = yield
 
 local YieldEnumerable
 YieldEnumerable = define("System.YieldEnumerable", function (T)
@@ -1716,7 +1748,18 @@ YieldEnumerable = define("System.YieldEnumerable", function (T)
   }
 end, {
   getCurrent = System.getCurrent,
-  Dispose = System.emptyFn,
+  Dispose = function (this)
+    local c = this.c
+    if c then
+      -- Left before its end: the iterator runs the finally blocks it is inside.
+      this.c = false
+      this.current = nil
+      local ok, v = cresume(c, disposed)
+      if not ok and v ~= disposed then
+        error(v)
+      end
+    end
+  end,
   GetEnumerator = function (this)
     return setmetatable({ f = this.f, args = this.args }, YieldEnumerable(this.__genericT__))
   end,

@@ -39,7 +39,7 @@ local ObjectDisposedException = System.ObjectDisposedException
 local ccreate = System.ccreate
 local cpool = System.cpool
 local cresume = System.cresume
-local cyield = System.yield
+local cyield = System.cyield
 
 local type = type
 local table = table
