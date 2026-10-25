@@ -479,12 +479,13 @@ namespace CSharpLua {
         foreach (var p in ctor.Parameters) {
           if (index < parameterList.Parameters.Count) {
             var parameterName = parameterList.Parameters[index];
-            LuaStatementSyntax keep = LuaIdentifierNameSyntax.This.MemberAccess(parameterName).Assignment(parameterName);
+            var fieldName = isRecord ? parameterName : GetPrimaryParameterField(typeSymbol, p.Name, parameterName);
+            LuaStatementSyntax keep = LuaIdentifierNameSyntax.This.MemberAccess(fieldName).Assignment(parameterName);
             function.AddStatement(keep);
             function.InitAfter = keep;
             var expression = GetFieldValueExpression(p.Type, null, out bool isLiteral, out _);
             if (expression != null) {
-              typeDeclaration.AddField(parameterName, expression, p.Type.IsImmutable() && isLiteral, false, false, true, null, false, false);
+              typeDeclaration.AddField(fieldName, expression, p.Type.IsImmutable() && isLiteral, false, false, true, null, false, false);
             }
           }
           ++index;
@@ -512,6 +513,19 @@ namespace CSharpLua {
       }
 
       typeDeclaration.AddCtor(function, false);
+    }
+
+    // The field a class keeps a primary constructor's parameter in: the parameter's name, or, when a base class has a member
+    // or a primary constructor parameter of that name, which would be the same Lua field, the name and the class's.
+    private static LuaIdentifierNameSyntax GetPrimaryParameterField(INamedTypeSymbol type, string name, LuaIdentifierNameSyntax luaName) {
+      for (var baseType = type.BaseType; baseType != null && !baseType.IsSystemObjectOrValueType(); baseType = baseType.BaseType) {
+        bool hasParameter = baseType.DeclaringSyntaxReferences.Select(i => i.GetSyntax()).OfType<TypeDeclarationSyntax>()
+          .Any(i => i.ParameterList != null && i.ParameterList.Parameters.Any(p => p.Identifier.ValueText == name));
+        if (hasParameter || !baseType.GetMembers(name).IsEmpty) {
+          return luaName.ValueText + "_" + type.Name;
+        }
+      }
+      return luaName;
     }
 
     private static bool IsInsidePrimaryConstructor(SyntaxNode node) {
@@ -3440,7 +3454,11 @@ namespace CSharpLua {
           if (parameterSymbol.OriginalDefinition.DeclaringSyntaxReferences.Any(r => r.GetSyntax().Parent?.Parent is TypeDeclarationSyntax)
               && SymbolEqualityComparer.Default.Equals(parameterSymbol.ContainingSymbol?.ContainingType, CurTypeSymbol)
               && !IsInsidePrimaryConstructor(node)) {
-            identifier = LuaIdentifierNameSyntax.This.MemberAccess(GetSampleName(symbol));
+            LuaIdentifierNameSyntax name = GetSampleName(symbol);
+            if (!CurTypeSymbol.IsRecord) {
+              name = GetPrimaryParameterField(CurTypeSymbol, parameterSymbol.Name, name);
+            }
+            identifier = LuaIdentifierNameSyntax.This.MemberAccess(name);
           } else {
             identifier = GetSampleName(symbol);
           }
