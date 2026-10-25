@@ -604,7 +604,9 @@ namespace CSharpLua {
         // A value the lambda returns is converted to the delegate's return type (an integer returned as a float is made one).
         var expression = delegateInvokeMethod!.ReturnsVoid ? body.AcceptExpression(this) : VisitExpression((ExpressionSyntax)body);
         if (delegateInvokeMethod.ReturnsVoid) {
-          if (expression != LuaExpressionSyntax.EmptyExpression) {
+          // A call with an out argument or an object initializer leaves its value in a temporary, written before; the
+          // temporary's name alone is not a Lua statement, so it is left out, as for a method with an expression body.
+          if (expression != LuaExpressionSyntax.EmptyExpression && expression is not (LuaIdentifierNameSyntax or LuaMemberAccessExpressionSyntax)) {
             function.AddStatement(expression);
           }
         } else {
