@@ -7,11 +7,18 @@ Warcraft III Lua maps and is published as War3Net.CSharpLua and War3Net.CSharpLu
 The files below were changed by mdlsvensson in 2026, from Drake53's master (v2.0.4): by a merge of yanghuan/CSharp.lua's
 master (C# 11 to 14 support), and by fixes for Moonwell (https://github.com/mdlsvensson/moonwell) to collection
 expressions, template properties, string escapes, nullable values made text, nullable conditionals, whole-number floats,
-project references and the NuGet packages folder. Each change is in the history of the moonwell-package branch.
+project references, the NuGet packages folder, lambdas, returns, primary constructors, object initializers, foreach
+loops left early and continue inside a switch. Each change is in the history of the moonwell-package branch.
 
 CSharp.lua/CSharp.lua.csproj
 CSharp.lua/Compiler.cs
+CSharp.lua/LuaAst/LuaFunctionExpressSyntax.cs
+CSharp.lua/LuaAst/LuaIdentifierNameSyntax.cs
 CSharp.lua/LuaAst/LuaLiteralExpressionSyntax.cs
+CSharp.lua/LuaAst/LuaLoopStatement.cs
+CSharp.lua/LuaAst/LuaStatementSyntax.cs
+CSharp.lua/LuaAst/LuaTypeDeclarationSyntax.cs
+CSharp.lua/LuaRenderer.cs
 CSharp.lua/LuaSyntaxGenerator.cs
 CSharp.lua/LuaSyntaxNodeTransform.cs
 CSharp.lua/LuaSyntaxNodeTransform.Helper.cs
@@ -20,6 +27,8 @@ CSharp.lua/PackageHelper.cs
 CSharp.lua/ProjectHelper.cs
 CSharp.lua/System.xml
 CSharp.lua/Utils.cs
+CSharp.lua/CoreSystem.Lua/CoreSystem/Array.lua
+CSharp.lua/CoreSystem.Lua/CoreSystem/Collections/Linq.lua
 CSharp.lua/CoreSystem.Lua/CoreSystem/Core.lua
 CSharp.lua/CoreSystem.Lua/CoreSystem/Enum.lua
 CSharp.lua/CoreSystem.Lua/CoreSystem/Math.lua
@@ -28,4 +37,5 @@ CSharp.lua/CoreSystem.Lua/CoreSystem/Number.lua
 CSharp.lua/CoreSystem.Lua/CoreSystem/ReadOnlySpan.lua
 CSharp.lua/CoreSystem.Lua/CoreSystem/Span.lua
 CSharp.lua/CoreSystem.Lua/CoreSystem/String.lua
+CSharp.lua/CoreSystem.Lua/CoreSystem/Threading/Task.lua
 CSharp.lua.CoreSystem/CSharp.lua.CoreSystem.csproj
