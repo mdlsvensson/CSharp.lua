@@ -498,14 +498,15 @@ namespace CSharpLua.LuaAst {
       if (hasCtors) {
         if (hasInit) {
           if (ctors_.Count == 1) {
-            ctors_.First().Function.Body.Statements.InsertRange(0, initStatements_);
+            var function = ctors_.First().Function;
+            function.Body.Statements.InsertRange(function.InitIndex, initStatements_);
           } else {
             var init = LuaIdentifierNameSyntax.Init;
             AddInitFunction(body, init, GetInitFunction(), false);
             foreach (var ctor in ctors_) {
               if (!ctor.Function.IsInvokeThisCtor) {
                 var invocationInit = new LuaInvocationExpressionSyntax(init, LuaIdentifierNameSyntax.This);
-                ctor.Function.Body.Statements.Insert(0, invocationInit);
+                ctor.Function.Body.Statements.Insert(ctor.Function.InitIndex, invocationInit);
               }
             }
           }
