@@ -33,6 +33,25 @@ namespace CSharpLua.LuaAst {
     }
 
     public static readonly LuaStatementSyntax Empty = new EmptyLuaStatementSyntax();
+
+    /// <summary>
+    /// Whether the statement writes no Lua code: a comment, blank lines, nothing, or a line of a code template that starts
+    /// with -- (as Moonwell's line marks, /*[[--@mw 3:12]]*/).
+    /// </summary>
+    internal bool IsNoCode() {
+      switch (this) {
+        case LuaCommentStatement:
+        case LuaBlankLinesStatement:
+        case EmptyLuaStatementSyntax:
+          return true;
+        case LuaStatementListSyntax list:
+          return list.Statements.All(i => i.IsNoCode());
+        case LuaExpressionStatementSyntax { Expression: LuaIdentifierNameSyntax identifier }:
+          return identifier.ValueText.TrimStart().StartsWith("--", StringComparison.Ordinal);
+        default:
+          return false;
+      }
+    }
   }
 
   public sealed class LuaExpressionStatementSyntax : LuaStatementSyntax {
