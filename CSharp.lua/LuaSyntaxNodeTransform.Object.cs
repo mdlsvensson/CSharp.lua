@@ -46,6 +46,26 @@ namespace CSharpLua {
       return creationExpression;
     }
 
+    // Whether nothing else of the statement is written between the expression and its use: the statement itself, what it
+    // returns, or the value of its only variable or of an assignment.
+    private static bool IsWholeValueOfStatement(ExpressionSyntax node) {
+      switch (node.Parent) {
+        case ExpressionStatementSyntax:
+        case ReturnStatementSyntax:
+        case YieldStatementSyntax:
+        case ArrowExpressionClauseSyntax:
+          return true;
+        case EqualsValueClauseSyntax { Parent: VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax declaration } }:
+          return declaration.Variables.Count == 1;
+        case EqualsValueClauseSyntax { Parent: PropertyDeclarationSyntax }:
+          return true;
+        case AssignmentExpressionSyntax assignment:
+          return assignment.Right == node && assignment.Parent is ExpressionStatementSyntax;
+        default:
+          return false;
+      }
+    }
+
     private LuaExpressionSyntax GetObjectCreationInitializer(LuaExpressionSyntax creationExpression, InitializerExpressionSyntax initializer, ExpressionSyntax node) {
       int prevTempCount = CurFunction.TempCount;
       int prevReleaseCount = CurBlock.ReleaseCount;
@@ -59,7 +79,13 @@ namespace CSharpLua {
           case SyntaxKind.ArrayInitializerExpression:
             break;
           default:
-            ReleaseTempIdentifiers(prevTempCount, prevReleaseCount);
+            if (IsWholeValueOfStatement(node)) {
+              ReleaseTempIdentifiers(prevTempCount, prevReleaseCount);
+            } else {
+              // The object is read later in the statement (new P { X = 1 }.X + new P { X = 2 }.X): its name is given back
+              // at the end of the statement, so a second initializer before then gets another one.
+              CurBlock.ReleaseCount = prevReleaseCount + (CurFunction.TempCount - prevTempCount);
+            }
             break;
         }
       }
