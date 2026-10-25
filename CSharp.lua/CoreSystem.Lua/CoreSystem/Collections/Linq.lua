@@ -96,6 +96,15 @@ local function createEnumerator(T, source, tryGetNext, init)
     end,
     getCurrent = function()
       return current
+    end,
+    -- Left before its end: the source's enumerator is disposed too, so an iterator below runs its finally blocks.
+    Dispose = function()
+      if en then
+        local dispose = en.Dispose
+        if dispose then
+          dispose(en)
+        end
+      end
     end
   }, InternalEnumerator(T))
 end

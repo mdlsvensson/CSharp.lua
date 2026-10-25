@@ -74,6 +74,7 @@ namespace CSharpLua {
     private readonly Stack<TypeDeclarationInfo> typeDeclarations_ = new();
     private readonly Stack<LuaFunctionExpressionSyntax> functions_ = new();
     private readonly Stack<MethodInfo> methodInfos_ = new();
+    private readonly Stack<(MethodInfo Method, LuaIdentifierNameSyntax Enumerator)> foreachEnumerators_ = new();
     private readonly Stack<LuaBlockSyntax> blocks_ = new();
     private readonly Stack<LuaIfStatementSyntax> ifStatements_ = new();
     private readonly Stack<LuaSwitchAdapterStatementSyntax> switches_ = new();
@@ -1610,7 +1611,7 @@ namespace CSharpLua {
 
     public override LuaSyntaxNode VisitReturnStatement(ReturnStatementSyntax node) {
       var expression = node.Expression != null ? VisitExpression(node.Expression) : null;
-      var result = InternalVisitReturnStatement(expression, node);
+      var result = DisposeForeachEnumerators(InternalVisitReturnStatement(expression, node));
       if (node.Parent.IsKind(SyntaxKind.Block) && node.Parent.Parent is MemberDeclarationSyntax) {
         var block = (BlockSyntax)node.Parent;
         if (block.Statements.Last() != node) {
@@ -5215,28 +5216,141 @@ namespace CSharpLua {
       }
     }
 
+    // Whether a foreach disposes its enumerator: when it can be left early (a break of its own, a return or a yield break)
+    // and what it loops over may be an iterator (an interface, or a type of the code's own). C# disposes the enumerator
+    // then, and an iterator runs the finally blocks it is inside; a loop over the framework's collections is written as it
+    // was.
+    private bool IsForeachDisposing(CommonForEachStatementSyntax node) {
+      if (node.AwaitKeyword.IsKind(SyntaxKind.AwaitKeyword)) {
+        return false;
+      }
+      var type = semanticModel_.GetTypeInfo(node.Expression).Type;
+      if (type == null) {
+        return false;
+      }
+      if (type.TypeKind != TypeKind.Interface) {
+        var getEnumerator = semanticModel_.GetForEachStatementInfo(node).GetEnumeratorMethod;
+        if (getEnumerator == null || getEnumerator.ContainingType.DeclaringSyntaxReferences.IsEmpty) {
+          return false;
+        }
+      }
+      var descendants = node.Statement.DescendantNodesAndSelf(i => i is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax));
+      foreach (var descendant in descendants) {
+        switch (descendant) {
+          case ReturnStatementSyntax:
+          case YieldStatementSyntax yield when yield.IsKind(SyntaxKind.YieldBreakStatement):
+            return true;
+          case BreakStatementSyntax: {
+            var owner = descendant.Ancestors().First(i => i is ForStatementSyntax or CommonForEachStatementSyntax or WhileStatementSyntax or DoStatementSyntax or SwitchStatementSyntax);
+            if (owner == node) {
+              return true;
+            }
+            break;
+          }
+        }
+      }
+      return false;
+    }
+
+    // The loop of a foreach that disposes its enumerator: what each gives is kept in locals of the do block, and the
+    // enumerator is disposed after the loop and, through foreachEnumerators_, before a return inside it.
+    private LuaForInStatementSyntax BuildDisposingForIn(LuaIdentifierNameSyntax identifier, LuaExpressionSyntax expression, LuaBlockStatementSyntax block, out LuaIdentifierNameSyntax enumerator) {
+      var iterator = GetTempIdentifier();
+      enumerator = GetTempIdentifier();
+      var start = GetTempIdentifier();
+      var names = new[] { iterator, enumerator, start };
+      block.AddStatement(new LuaLocalVariablesSyntax(names, new[] { new LuaInvocationExpressionSyntax(LuaIdentifierNameSyntax.Each, expression) }));
+      return new LuaForInStatementSyntax(identifier, new LuaSequenceListExpressionSyntax(names));
+    }
+
+    private void VisitDisposingLoopBody(StatementSyntax bodyStatement, LuaBlockSyntax body, LuaIdentifierNameSyntax enumerator) {
+      if (enumerator == null) {
+        VisitLoopBody(bodyStatement, body);
+      } else {
+        foreachEnumerators_.Push((CurMethodInfoOrNull, enumerator));
+        VisitLoopBody(bodyStatement, body);
+        foreachEnumerators_.Pop();
+      }
+    }
+
+    private LuaStatementSyntax EndDisposingForIn(LuaForInStatementSyntax forInStatement, LuaBlockStatementSyntax block, LuaIdentifierNameSyntax enumerator) {
+      if (block == null) {
+        return forInStatement;
+      }
+      block.AddStatement(forInStatement);
+      block.AddStatement(new LuaInvocationExpressionSyntax(LuaIdentifierNameSyntax.Dispose, enumerator));
+      PopBlock();
+      return block;
+    }
+
+    // A return or yield break inside foreach loops that dispose their enumerators disposes them, the innermost first, after
+    // the values it gives are worked out.
+    private LuaStatementSyntax DisposeForeachEnumerators(LuaStatementSyntax statement) {
+      if (foreachEnumerators_.Count == 0 || statement is not LuaReturnStatementSyntax returnStatement) {
+        return statement;
+      }
+      var method = CurMethodInfoOrNull;
+      var enumerators = foreachEnumerators_.Where(i => i.Method == method).Select(i => i.Enumerator).ToList();
+      if (enumerators.Count == 0) {
+        return statement;
+      }
+      if (returnStatement.Expressions.Count == 0) {
+        var statements = new LuaStatementListSyntax();
+        foreach (var enumerator in enumerators) {
+          statements.Statements.Add(new LuaInvocationExpressionSyntax(LuaIdentifierNameSyntax.Dispose, enumerator));
+        }
+        statements.Statements.Add(returnStatement);
+        return statements;
+      }
+      IEnumerable<LuaExpressionSyntax> values = returnStatement.Expressions;
+      foreach (var enumerator in enumerators) {
+        var invocation = new LuaInvocationExpressionSyntax(LuaIdentifierNameSyntax.DisposeOf, enumerator);
+        invocation.AddArguments(values);
+        values = new[] { invocation };
+      }
+      return new LuaReturnStatementSyntax(values);
+    }
+
     public override LuaSyntaxNode VisitForEachStatement(ForEachStatementSyntax node) {
       LuaIdentifierNameSyntax identifier = node.Identifier.ValueText;
       CheckLocalVariableName(ref identifier, node);
       var expression = node.Expression.AcceptExpression(this);
       bool isAsync = node.AwaitKeyword.IsKind(SyntaxKind.AwaitKeyword);
-      var forInStatement = new LuaForInStatementSyntax(identifier, expression, isAsync);
+      LuaBlockStatementSyntax block = null;
+      LuaIdentifierNameSyntax enumerator = null;
+      LuaForInStatementSyntax forInStatement;
+      if (IsForeachDisposing(node)) {
+        block = new LuaBlockStatementSyntax();
+        PushBlock(block);
+        forInStatement = BuildDisposingForIn(identifier, expression, block, out enumerator);
+      } else {
+        forInStatement = new LuaForInStatementSyntax(identifier, expression, isAsync);
+      }
       CheckForeachCast(identifier, node, forInStatement, isAsync);
-      VisitLoopBody(node.Statement, forInStatement.Body);
-      return forInStatement;
+      VisitDisposingLoopBody(node.Statement, forInStatement.Body, enumerator);
+      return EndDisposingForIn(forInStatement, block, enumerator);
     }
 
     public override LuaSyntaxNode VisitForEachVariableStatement(ForEachVariableStatementSyntax node) {
       var temp = GetTempIdentifier();
       var expression = node.Expression.AcceptExpression(this);
-      var forInStatement = new LuaForInStatementSyntax(temp, expression);
+      LuaBlockStatementSyntax block = null;
+      LuaIdentifierNameSyntax enumerator = null;
+      LuaForInStatementSyntax forInStatement;
+      if (IsForeachDisposing(node)) {
+        block = new LuaBlockStatementSyntax();
+        PushBlock(block);
+        forInStatement = BuildDisposingForIn(temp, expression, block, out enumerator);
+      } else {
+        forInStatement = new LuaForInStatementSyntax(temp, expression);
+      }
       var left = node.Variable.AcceptExpression(this);
       var sourceType = semanticModel_.GetTypeInfo(node.Expression).Type;
       var elementType = sourceType.GetIEnumerableElementType();
       var right = BuildDeconstructExpression(elementType, temp, node.Expression);
       forInStatement.Body.AddStatement(left.Assignment(right));
-      VisitLoopBody(node.Statement, forInStatement.Body);
-      return forInStatement;
+      VisitDisposingLoopBody(node.Statement, forInStatement.Body, enumerator);
+      return EndDisposingForIn(forInStatement, block, enumerator);
     }
 
     private LuaWhileStatementSyntax BuildWhileStatement(ExpressionSyntax nodeCondition, StatementSyntax nodeStatement) {
@@ -5310,7 +5424,7 @@ namespace CSharpLua {
       var curMethod = CurMethodInfoOrNull;
       curMethod.HasYield = true;
       if (node.IsKind(SyntaxKind.YieldBreakStatement)) {
-        return new LuaReturnStatementSyntax();
+        return DisposeForeachEnumerators(new LuaReturnStatementSyntax());
       }
 
       string yieldToken = node!.YieldKeyword.ValueText;

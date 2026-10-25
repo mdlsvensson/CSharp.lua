@@ -33,6 +33,8 @@ namespace CSharpLua.LuaAst {
     public static readonly LuaIdentifierNameSyntax False = "false";
     public static readonly LuaIdentifierNameSyntax Throw = "System.throw";
     public static readonly LuaIdentifierNameSyntax Each = "System.each";
+    public static readonly LuaIdentifierNameSyntax Dispose = "System.dispose";
+    public static readonly LuaIdentifierNameSyntax DisposeOf = "System.disposeOf";
     public static readonly LuaIdentifierNameSyntax Object = "System.Object";
     public static readonly LuaIdentifierNameSyntax Array = "System.Array";
     public static readonly LuaIdentifierNameSyntax EmptyArray = "System.Array.Empty";
