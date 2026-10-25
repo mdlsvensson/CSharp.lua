@@ -3846,7 +3846,25 @@ namespace CSharpLua {
       switchStatement.Fill(node.Sections.Select(i => i.Accept<LuaStatementSyntax>(this)));
       PopBlock();
       switches_.Pop();
+      if (IsContinueOfOuterLoop(node)) {
+        // The switch is a repeat block, so a continue inside it left only the switch: the loop body is left after it too.
+        var statements = new LuaStatementListSyntax();
+        statements.Statements.Add(switchStatement);
+        var ifStatement = new LuaIfStatementSyntax(LuaIdentifierNameSyntax.Continue);
+        ifStatement.Body.AddStatement(BuildContinueAdapter(node));
+        statements.Statements.Add(ifStatement);
+        return statements;
+      }
       return switchStatement;
+    }
+
+    // Whether a continue inside the switch is of a loop around it, not of a loop inside it.
+    private static bool IsContinueOfOuterLoop(SwitchStatementSyntax node) {
+      var descendants = node.DescendantNodes(i => i is not (AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax));
+      return descendants.OfType<ContinueStatementSyntax>().Any(i => {
+        var loop = i.Ancestors().First(j => j is ForStatementSyntax or CommonForEachStatementSyntax or WhileStatementSyntax or DoStatementSyntax);
+        return loop.Span.Contains(node.Span);
+      });
     }
 
     private void FillSwitchSectionStatements(LuaBlockSyntax block, SwitchSectionSyntax node) {
@@ -5147,6 +5165,11 @@ namespace CSharpLua {
     }
 
     public override LuaSyntaxNode VisitContinueStatement(ContinueStatementSyntax node) {
+      return BuildContinueAdapter(node);
+    }
+
+    // A continue at the place of node: continue = true, then a break, or a return false out of a try's function.
+    private LuaContinueAdapterStatementSyntax BuildContinueAdapter(SyntaxNode node) {
       bool isWithinTry = IsParentTryStatement(node);
       if (isWithinTry) {
         var check = (LuaCheckLoopControlExpressionSyntax)CurFunction;
