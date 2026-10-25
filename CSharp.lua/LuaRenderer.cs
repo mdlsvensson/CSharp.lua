@@ -203,9 +203,36 @@ namespace CSharpLua {
       Write(node.OpenToken);
       WriteNewLine();
       AddIndent();
-      WriteNodes(node.Statements);
+      WriteBlockStatements(node.Statements);
       Outdent();
       Write(node.CloseToken);
+    }
+
+    private static void AddStatements(IEnumerable<LuaStatementSyntax> statements, List<LuaStatementSyntax> list) {
+      foreach (var statement in statements) {
+        if (statement is LuaStatementListSyntax statementList) {
+          AddStatements(statementList.Statements, list);
+        } else {
+          list.Add(statement);
+        }
+      }
+    }
+
+    // Lua takes a return only as the last statement of a block. One with code after it (statements that never run, a for
+    // loop's step written after the body, ...) is written in a do block of its own.
+    private void WriteBlockStatements(IEnumerable<LuaStatementSyntax> statements) {
+      var list = new List<LuaStatementSyntax>();
+      AddStatements(statements, list);
+      int lastCode = list.FindLastIndex(i => !i.IsNoCode());
+      for (int i = 0; i < list.Count; ++i) {
+        if (i < lastCode && list[i] is LuaBaseReturnStatementSyntax) {
+          var block = new LuaBlockStatementSyntax();
+          block.Statements.Add(list[i]);
+          block.Render(this);
+        } else {
+          list[i].Render(this);
+        }
+      }
     }
 
     internal void Render(LuaBlockStatementSyntax node) {

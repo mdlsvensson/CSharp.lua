@@ -5173,7 +5173,8 @@ namespace CSharpLua {
         block.Statements.Add(new LuaLocalVariableDeclaratorSyntax(continueIdentifier));
         LuaRepeatStatementSyntax repeatStatement = new LuaRepeatStatementSyntax(LuaIdentifierNameSyntax.One);
         WriteStatementOrBlock(bodyStatement, repeatStatement.Body);
-        var lastStatement = repeatStatement.Body.Statements.Last();
+        // A comment after the last return or break is not a statement: continue = true after a return is a Lua syntax error.
+        var lastStatement = repeatStatement.Body.Statements.LastOrDefault(i => !i.IsNoCode()) ?? repeatStatement.Body.Statements.Last();
         bool isLastFinal = lastStatement is LuaBaseReturnStatementSyntax || IsLastBreakStatement(lastStatement);
         if (!isLastFinal) {
           repeatStatement.Body.Statements.Add(continueIdentifier.Assignment(LuaIdentifierNameSyntax.True));
