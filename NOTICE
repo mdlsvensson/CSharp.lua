@@ -8,11 +8,15 @@ The files below were changed by mdlsvensson in 2026, from Drake53's master (v2.0
 master (C# 11 to 14 support), and by fixes for Moonwell (https://github.com/mdlsvensson/moonwell) to collection
 expressions, template properties, string escapes, nullable values made text, nullable conditionals, whole-number floats,
 project references, the NuGet packages folder, lambdas, returns, primary constructors, object initializers, foreach
-loops left early, continue inside a switch, fields named as a base class's private field and a float zero made an
-integer in Warcraft III's Lua. Each change is in the history of the moonwell-package branch.
+loops left early, continue inside a switch, fields named as a base class's private field, a float zero made an
+integer in Warcraft III's Lua, numbers written in the culture of the machine, local functions used above their
+declaration, returns after a using declaration, nullable structs compared with null, the negation of a negative constant
+and patterns in a switch statement's case labels. Each change is in the history of the moonwell-package branch.
 
 CSharp.lua/CSharp.lua.csproj
 CSharp.lua/Compiler.cs
+CSharp.lua/LuaAst/LuaBlockSyntax.cs
+CSharp.lua/LuaAst/LuaExpressionSyntax.cs
 CSharp.lua/LuaAst/LuaFunctionExpressSyntax.cs
 CSharp.lua/LuaAst/LuaIdentifierNameSyntax.cs
 CSharp.lua/LuaAst/LuaLiteralExpressionSyntax.cs
