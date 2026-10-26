@@ -4075,9 +4075,19 @@ namespace CSharpLua {
       return node.Expression.AcceptExpression(this);
     }
 
+    // The property or positional pattern of an is expression or a not pattern. A positional part reads the value's
+    // Deconstruct into locals before the condition, which is safe only for a value that cannot be null.
     private LuaExpressionSyntax BuildRecursivePatternExpression(RecursivePatternSyntax recursivePattern, LuaIdentifierNameSyntax governingIdentifier, ExpressionSyntax governingExpression) {
       LuaLocalVariablesSyntax deconstruct = null;
-      return BuildRecursivePatternExpression(recursivePattern, governingIdentifier, ref deconstruct, governingExpression);
+      var condition = BuildRecursivePatternExpression(recursivePattern, governingIdentifier, ref deconstruct, governingExpression);
+      if (deconstruct != null) {
+        var type = semanticModel_.GetTypeInfo(governingExpression).Type;
+        if (type is not { IsValueType: true } || type.IsNullableType()) {
+          throw new CompilationErrorException(recursivePattern, "a positional pattern on a value that can be null is not supported here; match its properties ({ X: 1 }) or use a switch statement");
+        }
+        CurBlock.AddStatement(deconstruct);
+      }
+      return condition;
     }
 
     // governingExpression is the C# expression tested, or null for a pattern inside another one (a subpattern), where
