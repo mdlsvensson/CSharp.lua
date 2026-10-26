@@ -10,11 +10,14 @@ namespace CSharpLua.Tests {
   internal static class CoreSystemLua {
     private static readonly string Root = Path.GetFullPath(@"..\..\..\..");
 
-    /// <summary>Loads CoreSystem, runs <paramref name="code"/> and returns what it printed, a line each.</summary>
-    public static string Run(string code) {
+    /// <summary>Loads CoreSystem, runs <paramref name="code"/> and returns what it printed, a line each; <paramref name="prelude"/> runs before CoreSystem is loaded.</summary>
+    public static string Run(string code, string prelude = null) {
       var coreSystem = Path.Combine(Root, "CSharp.lua", "CoreSystem.Lua");
       var script = new StringBuilder();
       script.AppendLine("debug = nil");
+      if (prelude != null) {
+        script.AppendLine(prelude);
+      }
       foreach (var file in CoreSystemProvider.GetCoreSystemFiles()) {
         script.AppendLine("dofile([[" + file + "]])");
       }
