@@ -31,8 +31,8 @@
     <PackageReleaseNotes></PackageReleaseNotes>
 
     <PackageId>Moonwell.CSharpLua.CoreSystem</PackageId>
-    <Version>2.0.3-moonwell.3</Version>
-    <FileVersion>2.0.3.3</FileVersion>
+    <Version>2.0.3-moonwell.4</Version>
+    <FileVersion>2.0.3.4</FileVersion>
     <AssemblyVersion>2.0</AssemblyVersion>
   </PropertyGroup>
 
