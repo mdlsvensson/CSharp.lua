@@ -22,6 +22,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.Contracts;
+using System.Globalization;
 using System.Linq;
 
 namespace CSharpLua {
@@ -1288,7 +1289,7 @@ namespace CSharpLua {
       if (IsCurTypeSerializable || attributes.Count > 0 || generator_.HasMetadataAttribute(CurTypeSymbol)) {
         AddFieldMetaData(symbol, identifier, attributes);
       }
-      var value = new LuaIdentifierLiteralExpressionSyntax(symbol.ConstantValue.ToString());
+      var value = new LuaIdentifierLiteralExpressionSyntax(Convert.ToString(symbol.ConstantValue, CultureInfo.InvariantCulture));
       return new LuaKeyValueTableItemSyntax(identifier, value);
     }
 

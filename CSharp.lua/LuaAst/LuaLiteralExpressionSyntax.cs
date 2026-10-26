@@ -143,7 +143,7 @@ namespace CSharpLua.LuaAst {
   }
 
   public sealed class LuaCharacterLiteralExpression : LuaConstLiteralExpression {
-    public LuaCharacterLiteralExpression(char character) : base(((int)character).ToString(), GetIdentifierToken(character)) {
+    public LuaCharacterLiteralExpression(char character) : base(((int)character).ToString(CultureInfo.InvariantCulture), GetIdentifierToken(character)) {
     }
 
     private static string GetIdentifierToken(char character) {
