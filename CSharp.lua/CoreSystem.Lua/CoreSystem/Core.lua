@@ -23,7 +23,6 @@ local table = table
 local tremove = table.remove
 local tconcat = table.concat
 local floor = math.floor
-local ceil = math.ceil
 local error = error
 local select = select
 local xpcall = xpcall
@@ -447,8 +446,13 @@ local function defArray(name, cls, Array, MultiArray)
   }))
 end
 
+-- Warcraft III's Lua gives math.ceil(0.0) and math.ceil(-0.0) as 1, so the ceiling is taken from floor
+local function ceil(num)
+  return -floor(-num)
+end
+
 local function trunc(num)
-  return num > 0 and floor(num) or ceil(num)
+  return num >= 0 and floor(num) or ceil(num)
 end
 
 local function when(f, ...)
@@ -480,6 +484,7 @@ System = {
   defArray = defArray,
   enumMetatable = enumMetatable,
   trunc = trunc,
+  ceil = ceil,
   global = global
 }
 if prevSystem then

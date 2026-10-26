@@ -19,7 +19,7 @@ local trunc = System.trunc
 
 local math = math
 local floor = math.floor
-local ceil = math.ceil
+local ceil = System.ceil
 local min = math.min
 local max = math.max
 local abs = math.abs
