@@ -3026,7 +3026,12 @@ namespace CSharpLua {
           }
 
           if (parent.Expression == node) {
-            return true;
+            // The first name of an extended property pattern ({ Inner.X: 9 }) is a member of the value tested.
+            SyntaxNode top = parent;
+            while (top.Parent is MemberAccessExpressionSyntax) {
+              top = top.Parent;
+            }
+            return top.Parent is not ExpressionColonSyntax;
           }
           return false;
         }
@@ -4020,6 +4025,9 @@ namespace CSharpLua {
         case SyntaxKind.RecursivePattern: {
           var recursivePattern = (RecursivePatternSyntax)node.Pattern;
           var switchStatement = (SwitchStatementSyntax)FindParent(node, SyntaxKind.SwitchStatement);
+          if (recursivePattern.Designation != null && !recursivePattern.Designation.IsKind(SyntaxKind.DiscardDesignation)) {
+            AddLocalVariableMapping(left, recursivePattern.Designation);
+          }
           LuaLocalVariablesSyntax deconstruct = null;
           var expression = BuildRecursivePatternExpression(recursivePattern, left, ref deconstruct, switchStatement.Expression);
           if (deconstruct != null) {
@@ -4038,9 +4046,15 @@ namespace CSharpLua {
           var typePattern = (TypePatternSyntax)node.Pattern;
           return BuildTypePattern(typePattern.Type, left, switchStatement.Expression, node.WhenClause);
         }
-        default: {
+        case SyntaxKind.ConstantPattern: {
           var patternExpression = node.Pattern.AcceptExpression(this);
           var expression = left.EqualsEquals(patternExpression);
+          return BuildSwitchLabelWhenClause(expression, node.WhenClause);
+        }
+        default: {
+          // A relational, not, parenthesized or list pattern, as in an is expression.
+          var switchStatement = (SwitchStatementSyntax)FindParent(node, SyntaxKind.SwitchStatement);
+          var expression = BuildPatternExpression(left, node.Pattern, switchStatement.Expression);
           return BuildSwitchLabelWhenClause(expression, node.WhenClause);
         }
       }
@@ -4089,7 +4103,7 @@ namespace CSharpLua {
       }
     }
 
-    public LuaExpressionSyntax BuildPropertyPatternNameExpression(LuaIdentifierNameSyntax governingIdentifier, IdentifierNameSyntax nameIdentifier) {
+    public LuaExpressionSyntax BuildPropertyPatternNameExpression(LuaExpressionSyntax governingIdentifier, IdentifierNameSyntax nameIdentifier) {
       var symbol = semanticModel_.GetSymbolInfo(nameIdentifier).Symbol;
       if (symbol.Kind == SymbolKind.Field) {
         var name = GetMemberName(symbol);
@@ -4098,7 +4112,7 @@ namespace CSharpLua {
         var propertySymbol = (IPropertySymbol)symbol;
         var codeTemplate = XmlMetaProvider.GetPropertyCodeTemplate(propertySymbol, true);
         if (codeTemplate != null) {
-          return InternalBuildCodeTemplateExpression(codeTemplate, null, null, null, governingIdentifier);
+          return InternalBuildCodeTemplateExpression(codeTemplate, null, null, null, governingIdentifier as LuaIdentifierNameSyntax ?? new LuaSymbolNameSyntax(governingIdentifier));
         }
 
         var name = nameIdentifier.AcceptExpression(this);
@@ -4115,12 +4129,15 @@ namespace CSharpLua {
       return BuildRecursivePatternExpression(recursivePattern, governingIdentifier, ref deconstruct, governingExpression);
     }
 
-    private LuaExpressionSyntax BuildRecursivePatternExpression(RecursivePatternSyntax recursivePattern, LuaIdentifierNameSyntax governingIdentifier, ref LuaLocalVariablesSyntax deconstruct, ExpressionSyntax governingExpression) {
+    // governingExpression is the C# expression tested, or null for a pattern inside another one (a subpattern), where
+    // governingIdentifier is the member read and a positional part, which needs a statement, is not supported.
+    private LuaExpressionSyntax BuildRecursivePatternExpression(RecursivePatternSyntax recursivePattern, LuaExpressionSyntax governingIdentifier, ref LuaLocalVariablesSyntax deconstruct, ExpressionSyntax governingExpression) {
+      var inputType = governingExpression != null ? semanticModel_.GetTypeInfo(governingExpression).Type : GetPatternInputType(recursivePattern);
       var subpatterns = recursivePattern.PropertyPatternClause?.Subpatterns ?? recursivePattern.PositionalPatternClause.Subpatterns;
       var subpatternExpressions = new List<LuaExpressionSyntax>();
       int subpatternIndex = 0;
       foreach (var subpattern in subpatterns) {
-        var expression = subpattern.Pattern.AcceptExpression(this);
+        LuaExpressionSyntax expression = null;
         if (subpattern.NameColon != null) {
           LuaExpressionSyntax left;
           if (governingIdentifier != null) {
@@ -4130,18 +4147,27 @@ namespace CSharpLua {
             Contract.Assert(fieldSymbol.ContainingType.IsTupleType);
             left = deconstruct.Variables[subpatternIndex];
           }
-          string operatorToken;
-          if (subpattern.Pattern.IsKind(SyntaxKind.RelationalPattern)) {
-            var relational = (RelationalPatternSyntax)subpattern.Pattern;
-            operatorToken = GetOperatorToken(relational.OperatorToken);
-          } else {
-            operatorToken = LuaSyntaxNode.Tokens.EqualsEquals;
-          }
-          subpatternExpressions.Add(left.Binary(operatorToken, expression));
+          expression = BuildSubpatternExpression(left, subpattern.Pattern);
+        } else if (subpattern.ExpressionColon != null) {
+          // { A.B: p } is { A: { B: p } }: each member read on the way is checked not to be nil first.
+          var checks = new List<LuaExpressionSyntax>();
+          var left = BuildExtendedPropertyPatternMember(governingIdentifier, subpattern.ExpressionColon.Expression, checks);
+          checks.Add(BuildSubpatternExpression(left, subpattern.Pattern));
+          expression = checks.Aggregate((x, y) => {
+            CheckBinaryParenthesized(ref y);
+            return x.And(y);
+          });
         } else if (!subpattern.Pattern.IsKind(SyntaxKind.DiscardPattern)) {
-          CheckSwitchDeconstruct(ref deconstruct, governingIdentifier, recursivePattern.Type ?? governingExpression, subpatterns.Count);
+          if (governingExpression == null) {
+            throw new CompilationErrorException(subpattern, "a positional pattern inside another pattern is not supported");
+          }
+          CheckSwitchDeconstruct(ref deconstruct, (LuaIdentifierNameSyntax)governingIdentifier, recursivePattern.Type ?? governingExpression, subpatterns.Count);
           var variable = deconstruct.Variables[subpatternIndex];
-          subpatternExpressions.Add(variable.EqualsEquals(expression));
+          expression = BuildSubpatternExpression(variable, subpattern.Pattern);
+        }
+        if (expression != null && expression != LuaIdentifierLiteralExpressionSyntax.True) {
+          CheckBinaryParenthesized(ref expression);
+          subpatternExpressions.Add(expression);
         }
         ++subpatternIndex;
       }
@@ -4149,12 +4175,38 @@ namespace CSharpLua {
         ? subpatternExpressions.Aggregate((x, y) => x.And(y))
         : governingIdentifier.NotEquals(LuaIdentifierNameSyntax.Nil);
       if (recursivePattern.Type != null) {
-        var isExpression = BuildIsPatternExpression(governingExpression, recursivePattern.Type, governingIdentifier);
+        var isExpression = BuildIsPatternExpression(inputType, recursivePattern.Type, governingIdentifier);
         if (isExpression != LuaIdentifierLiteralExpressionSyntax.True) {
           condition = isExpression.And(condition);
         }
+      } else if (subpatternExpressions.Count > 0 && governingIdentifier != null && (inputType is not { IsValueType: true } || inputType.IsNullableType())) {
+        // A property pattern does not match null.
+        condition = governingIdentifier.NotEquals(LuaIdentifierNameSyntax.Nil).And(condition);
       }
       return condition;
+    }
+
+    private LuaExpressionSyntax BuildExtendedPropertyPatternMember(LuaExpressionSyntax governing, ExpressionSyntax expression, List<LuaExpressionSyntax> checks) {
+      switch (expression) {
+        case IdentifierNameSyntax name: {
+          return BuildPropertyPatternNameExpression(governing, name);
+        }
+        case MemberAccessExpressionSyntax { Name: IdentifierNameSyntax name } memberAccess: {
+          var receiver = BuildExtendedPropertyPatternMember(governing, memberAccess.Expression, checks);
+          var receiverType = semanticModel_.GetSymbolInfo(memberAccess.Expression).Symbol switch {
+            IFieldSymbol field => field.Type,
+            IPropertySymbol property => property.Type,
+            _ => null,
+          };
+          if (receiverType is not { IsValueType: true } || receiverType.IsNullableType()) {
+            checks.Add(receiver.NotEquals(LuaIdentifierNameSyntax.Nil));
+          }
+          return BuildPropertyPatternNameExpression(receiver, name);
+        }
+        default: {
+          throw new CompilationErrorException(expression, $"the member '{expression}' in a property pattern is not supported");
+        }
+      }
     }
 
     public override LuaSyntaxNode VisitSwitchExpression(SwitchExpressionSyntax node) {
