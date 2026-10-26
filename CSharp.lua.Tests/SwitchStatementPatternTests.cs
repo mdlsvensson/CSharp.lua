@@ -7,7 +7,8 @@ namespace CSharpLua.Tests {
   /// property pattern (case { Inner.X: 9 }:) was always false, and case not null:, case (1 or 2): and case { X: not 3 }:
   /// stopped the compiler. A case label's pattern is now written as an is expression's is, a pattern inside a property or
   /// positional pattern is checked as one, a property pattern does not match null, and a relational pattern checks a value
-  /// that can be nil or of another type first. A variable declared for a member stops the compiler with an error.
+  /// that can be nil or of another type first. An is expression's positional pattern declares the locals it reads (on a
+  /// value type). A variable declared for a member stops the compiler with an error.
   /// </summary>
   [TestClass]
   public class SwitchStatementPatternTests {
@@ -25,7 +26,8 @@ namespace CSharpLua.Tests {
         + "x one y big tuple\n"
         + "even 4 big odd 11 odd\n"
         + "far near\n"
-        + "low. high. .\n",
+        + "low. high. .\n"
+        + "True True True True | False False False False\n",
         output);
     }
 

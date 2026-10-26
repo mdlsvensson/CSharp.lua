@@ -116,6 +116,12 @@ class Program {
     return text + ".";
   }
 
+  // The same parts in an is expression.
+  static string Is(Box b, int x, int y) {
+    var t = (x, y);
+    return (b is { Inner.X: 9 }) + " " + (b is { X: not 3 }) + " " + (t is (1, _)) + " " + (t is (> 0, > 5));
+  }
+
   public static void Main() {
     Console.WriteLine(Relational(-3) + " " + Relational(3) + " " + Relational(9) + " " + Relational(0));
     Console.WriteLine(Parenthesized(2) + " " + Parenthesized(12) + " " + Parenthesized(5));
@@ -136,5 +142,6 @@ class Program {
     Console.WriteLine(Var(4) + " " + Var(11) + " " + Var(3));
     Console.WriteLine(Struct(new Spot { X = 5 }) + " " + Struct(new Spot()));
     Console.WriteLine(Statements(1) + " " + Statements(9) + " " + Statements(5));
+    Console.WriteLine(Is(new Box { Inner = new Box { X = 9 } }, 1, 6) + " | " + Is(null, 2, 2));
   }
 }
