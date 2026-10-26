@@ -1549,13 +1549,37 @@ namespace CSharpLua {
       return returnStatement;
     }
 
+    // The innermost block of the current function with a using declaration above the statement being visited: the rest of
+    // that block becomes a function given to System.using, so a return there, at any depth, is one of that function's.
+    private LuaBlockSyntax FindUsingDeclarationsBlock() {
+      var body = CurFunction.Body;
+      foreach (var block in blocks_) {
+        if (block == body) {
+          break;
+        }
+        if (block.HasUsingDeclarations) {
+          return block;
+        }
+      }
+      return null;
+    }
+
     private LuaStatementSyntax InternalVisitReturnStatement(LuaExpressionSyntax expression, ReturnStatementSyntax node = null) {
+      if (CurMethodInfoOrNull?.IsInlining != true) {
+        var usingBlock = FindUsingDeclarationsBlock();
+        if (usingBlock != null) {
+          usingBlock.HasUsingReturn = true;
+          return BuildLoopControlReturnStatement(expression);
+        }
+      }
+
       if (CurFunction is LuaCheckLoopControlExpressionSyntax check) {
         check.HasReturn = true;
         return BuildLoopControlReturnStatement(expression);
       }
 
       if (CurBlock.HasUsingDeclarations) {
+        CurBlock.HasUsingReturn = true;
         return BuildLoopControlReturnStatement(expression);
       }
 
