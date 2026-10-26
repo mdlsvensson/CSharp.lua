@@ -1496,7 +1496,7 @@ namespace CSharpLua {
       }
     }
 
-    private IEnumerable<LuaStatementSyntax> VisitTriviaAndNode(SyntaxNode rootNode, IEnumerable<CSharpSyntaxNode> nodes, bool isCheckBlank = true) {
+    private IEnumerable<LuaStatementSyntax> VisitTriviaAndNode(SyntaxNode rootNode, IEnumerable<CSharpSyntaxNode> nodes, bool isCheckBlank = true, Dictionary<SyntaxNode, LuaStatementSyntax> before = null) {
       var syntaxTrivias = rootNode.DescendantTrivia().Where(i => i.IsExportSyntaxTrivia(rootNode));
       var syntaxTriviaNodes = syntaxTrivias.Select(i => new BlockCommonNode(i));
 
@@ -1514,7 +1514,21 @@ namespace CSharpLua {
       }
 
       int lastLine = -1;
+      HashSet<SyntaxNode> written = null;
       foreach (var common in list) {
+        if (before != null) {
+          // A local function defined above its declaration takes the comments above it along (a line mark among them),
+          // and the definitions go above the comments of the statement they are written before.
+          var owner = common.SyntaxNode ?? nodes.FirstOrDefault(i => i.FullSpan.Start <= common.SyntaxTrivia.SpanStart && common.SyntaxTrivia.Span.End <= i.SpanStart);
+          if (common.SyntaxNode == null && owner is LocalFunctionStatementSyntax function
+            && movedLocalFunctions_.TryGetValue(semanticModel_.GetDeclaredSymbol(function), out var definitions)) {
+            definitions.Statements.Add((LuaStatementSyntax)common.Visit(this));
+            continue;
+          }
+          if (owner != null && before.TryGetValue(owner, out var statement) && (written ??= new HashSet<SyntaxNode>()).Add(owner)) {
+            yield return statement;
+          }
+        }
         if (isCheckBlank) {
           var black = common.CheckBlankLine(ref lastLine);
           if (black != null) {
@@ -1529,7 +1543,8 @@ namespace CSharpLua {
       LuaBlockStatementSyntax block = new LuaBlockStatementSyntax();
       PushBlock(block);
 
-      var statements = VisitTriviaAndNode(node, node.Statements);
+      var definitions = MoveLocalFunctionsAboveUse(node.Statements, block);
+      var statements = VisitTriviaAndNode(node, node.Statements, true, definitions);
       block.Statements.AddRange(statements);
 
       var indexes = block.UsingDeclarations;
@@ -3438,7 +3453,7 @@ namespace CSharpLua {
           var localSymbol = (ILocalSymbol)symbol;
           if (localSymbol.IsConst) {
             if (localSymbol.Type.SpecialType == SpecialType.System_String) {
-              if (((string)localSymbol.ConstantValue).Length <= kStringConstInlineCount) {
+              if (((string)localSymbol.ConstantValue).Length <= kStringConstInlineCount || inlinedConstLocals_.Contains(localSymbol)) {
                 return GetConstLiteralExpression(localSymbol);
               }
             } else {
@@ -3752,6 +3767,14 @@ namespace CSharpLua {
                 variableDeclarator.Initializer = new LuaEqualsValueClauseSyntax(BuildDefaultValue(typeExpression));
               }
             }
+            // Captured by a local function defined above it: declared at the head of the block, assigned here.
+            if (movedLocalVariables_.Count > 0 && movedLocalVariables_.TryGetValue(semanticModel_.GetDeclaredSymbol(variable), out var headBlock)) {
+              headBlock.AddHeadVariable(variableDeclarator.Identifier);
+              if (variableDeclarator.Initializer == null) {
+                continue;
+              }
+              variableDeclarator.IsLocalDeclaration = false;
+            }
             variableListDeclaration.Variables.Add(variableDeclarator);
           }
         }
@@ -3892,7 +3915,8 @@ namespace CSharpLua {
         block.Statements.AddRange(luaBlock.Statements);
       } else {
         PushBlock(block);
-        var statements = VisitTriviaAndNode(node, node.Statements);
+        var definitions = MoveLocalFunctionsAboveUse(node.Statements, block);
+        var statements = VisitTriviaAndNode(node, node.Statements, true, definitions);
         block.AddStatements(statements);
         PopBlock();
       }

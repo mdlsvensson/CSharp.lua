@@ -1487,10 +1487,125 @@ namespace CSharpLua {
       return VisitExpression(node.Expression);
     }
 
+    // The local functions defined above their declaration, each with the statement list it is written into, and the locals
+    // they capture that are declared at the head of their block instead (see MoveLocalFunctionsAboveUse).
+    private readonly Dictionary<ISymbol, LuaStatementListSyntax> movedLocalFunctions_ = new(SymbolEqualityComparer.Default);
+    private readonly Dictionary<ISymbol, LuaBlockSyntax> movedLocalVariables_ = new(SymbolEqualityComparer.Default);
+    private readonly HashSet<ISymbol> inlinedConstLocals_ = new(SymbolEqualityComparer.Default);
+
+    private bool IsLocalFunctionOfType(LocalFunctionStatementSyntax node, IMethodSymbol symbol) {
+      return node.Modifiers.IsStatic() && IsStaticLocalMethodEnableAddToType(symbol);
+    }
+
+    /// <summary>
+    /// C# lets a block call a local function above its declaration, where the Lua has no function yet, so the call read a
+    /// global of that name. A local function used above its declaration (directly, through a lambda, or through another
+    /// local function of the block) is declared at the head of <paramref name="block"/> and assigned before the first
+    /// statement that uses it. A local of the block that such a function captures and that is declared at or below that
+    /// statement is declared at the head too, and its declaration becomes an assignment (a constant kept as a local is
+    /// written as its value instead). Returns, for each such statement, the statements to write before it, or null when no
+    /// function moves.
+    /// </summary>
+    private Dictionary<SyntaxNode, LuaStatementSyntax> MoveLocalFunctionsAboveUse(SyntaxList<StatementSyntax> statements, LuaBlockSyntax block) {
+      var functions = new List<(IMethodSymbol Symbol, int Index, LocalFunctionStatementSyntax Node)>();
+      for (int i = 0; i < statements.Count; ++i) {
+        if (statements[i] is LocalFunctionStatementSyntax localFunction) {
+          var symbol = (IMethodSymbol)semanticModel_.GetDeclaredSymbol(localFunction);
+          if (!IsLocalFunctionOfType(localFunction, symbol)) {
+            functions.Add((symbol, i, localFunction));
+          }
+        }
+      }
+      if (functions.Count == 0) {
+        return null;
+      }
+
+      var names = functions.Select(i => i.Symbol.Name).ToHashSet();
+      List<int> Uses(SyntaxNode node) {
+        var uses = new List<int>();
+        foreach (var name in node.DescendantNodesAndSelf().OfType<SimpleNameSyntax>()) {
+          if (names.Contains(name.Identifier.ValueText) && semanticModel_.GetSymbolInfo(name).Symbol is IMethodSymbol { MethodKind: MethodKind.LocalFunction } method) {
+            int index = functions.FindIndex(i => i.Symbol.EQ(method.OriginalDefinition));
+            if (index != -1 && !uses.Contains(index)) {
+              uses.Add(index);
+            }
+          }
+        }
+        return uses;
+      }
+
+      var functionUses = functions.Select(i => Uses(i.Node)).ToList();
+      var definedBefore = new Dictionary<int, int>();
+      for (int i = 0; i < statements.Count; ++i) {
+        if (statements[i] is LocalFunctionStatementSyntax) {
+          continue;
+        }
+        var pending = new Stack<int>(Uses(statements[i]));
+        var seen = new HashSet<int>();
+        while (pending.Count > 0) {
+          int function = pending.Pop();
+          if (seen.Add(function)) {
+            if (i < functions[function].Index && !definedBefore.ContainsKey(function)) {
+              definedBefore.Add(function, i);
+            }
+            foreach (var used in functionUses[function]) {
+              pending.Push(used);
+            }
+          }
+        }
+      }
+      if (definedBefore.Count == 0) {
+        return null;
+      }
+
+      var definitions = new Dictionary<SyntaxNode, LuaStatementSyntax>();
+      foreach (var (function, statementIndex) in definedBefore.OrderBy(i => functions[i.Key].Index)) {
+        var (symbol, _, node) = functions[function];
+        foreach (var name in node.DescendantNodes().OfType<IdentifierNameSyntax>()) {
+          if (semanticModel_.GetSymbolInfo(name).Symbol is ILocalSymbol local && !movedLocalVariables_.ContainsKey(local)) {
+            var declaration = local.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
+            if (declaration == null || node.Span.Contains(declaration.Span)) {
+              continue;
+            }
+            int declared = statements.IndexOf(i => i.Span.Contains(declaration.Span));
+            if (declared < statementIndex) {
+              continue;
+            }
+            if (local.IsConst) {
+              inlinedConstLocals_.Add(local);
+              continue;
+            }
+            if (statements[declared] is not LocalDeclarationStatementSyntax declarationStatement || declarationStatement.UsingKeyword.IsKeyword()
+              || declaration.Parent?.Parent != declarationStatement || local.IsRef) {
+              throw new CompilationErrorException(name, $"the local function '{symbol.Name}' is used above its declaration and uses '{local.Name}', which is declared between them in a way that cannot be moved; declare '{local.Name}' above the first use of '{symbol.Name}'");
+            }
+            movedLocalVariables_.Add(local, block);
+          }
+        }
+
+        var statement = statements[statementIndex];
+        if (!definitions.TryGetValue(statement, out var list)) {
+          list = new LuaStatementListSyntax();
+          definitions.Add(statement, list);
+        }
+        movedLocalFunctions_.Add(symbol, (LuaStatementListSyntax)list);
+        block.AddHeadVariable(GetLocalMethodName(symbol, node));
+      }
+      return definitions;
+    }
+
     public override LuaSyntaxNode VisitLocalFunctionStatement(LocalFunctionStatementSyntax node) {
       var result = BuildMethodDeclaration(node, default, node.ParameterList, node.TypeParameterList, node.Body, node.ExpressionBody);
-      if (node.Modifiers.IsStatic() && IsStaticLocalMethodEnableAddToType(result.Symbol)) {
+      if (IsLocalFunctionOfType(node, result.Symbol)) {
         CurTypeDeclaration.TypeDeclaration.AddMethod(result.Name, result.Function, true, result.Document);
+        return LuaStatementSyntax.Empty;
+      }
+
+      if (movedLocalFunctions_.TryGetValue(result.Symbol, out var definitions)) {
+        if (result.Document?.IsEmpty == false) {
+          definitions.Statements.Add(result.Document);
+        }
+        definitions.Statements.Add(result.Name.Assignment(result.Function));
         return LuaStatementSyntax.Empty;
       }
 
