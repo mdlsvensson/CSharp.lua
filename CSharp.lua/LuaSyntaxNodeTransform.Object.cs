@@ -960,9 +960,12 @@ namespace CSharpLua {
       int lastIndex = indexes.Last();
       var statements = block.Statements.Skip(lastIndex + 1);
       var usingAdapterExpress = new LuaUsingAdapterExpressionSyntax() {
-        HasReturn = node.Statements.Any(i => i.IsKind((SyntaxKind.ReturnStatement))),
+        HasReturn = block.HasUsingReturn || node.Statements.Any(i => i.IsKind((SyntaxKind.ReturnStatement))),
       };
+      // The using declarations above this one still wrap it, so a return that passes on its function's is one of theirs.
+      block.UsingDeclarations = position > 0 ? indexes : null;
       var usingStatement = BuildUsingStatement(usingAdapterExpress, variableIdentifiers, variableExpressions, body => body.Statements.AddRange(statements));
+      block.UsingDeclarations = null;
       block.Statements.RemoveRange(indexes[position]);
       block.AddStatement(usingStatement);
       indexes.RemoveRange(position);
