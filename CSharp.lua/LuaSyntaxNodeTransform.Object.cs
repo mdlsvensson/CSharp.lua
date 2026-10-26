@@ -22,6 +22,7 @@ using System.Text;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Operations;
 using CSharpLua.LuaAst;
 
 namespace CSharpLua {
@@ -1527,7 +1528,10 @@ namespace CSharpLua {
     }
 
     private LuaExpressionSyntax BuildIsPatternExpression(ExpressionSyntax leftTypeExpression, ExpressionSyntax rightTypeExpression, LuaExpressionSyntax leftName) {
-      var leftType = semanticModel_.GetTypeInfo(leftTypeExpression).Type;
+      return BuildIsPatternExpression(semanticModel_.GetTypeInfo(leftTypeExpression).Type, rightTypeExpression, leftName);
+    }
+
+    private LuaExpressionSyntax BuildIsPatternExpression(ITypeSymbol leftType, ExpressionSyntax rightTypeExpression, LuaExpressionSyntax leftName) {
       var rightType = semanticModel_.GetTypeInfo(rightTypeExpression).Type;
       if (leftType.Is(rightType)) {
         if (leftType!.IsValueType) {
@@ -1615,8 +1619,11 @@ namespace CSharpLua {
             }
           }
 
-          var patternExpression = notPattern.Pattern.AcceptExpression(this);
-          return targetExpression.NotEquals(patternExpression);
+          if (notPattern.Pattern.IsKind(SyntaxKind.ConstantPattern)) {
+            var patternExpression = notPattern.Pattern.AcceptExpression(this);
+            return targetExpression.NotEquals(patternExpression);
+          }
+          return BuildPatternExpression(targetExpression, notPattern.Pattern, targetNode).Parenthesized().Not();
         }
         case SyntaxKind.AndPattern:
         case SyntaxKind.OrPattern: {
@@ -1629,10 +1636,10 @@ namespace CSharpLua {
           return pattern.IsKind(SyntaxKind.AndPattern) ? left.And(right) : left.Or(right);
         }
         case SyntaxKind.RelationalPattern: {
-          var relationalPattern = (RelationalPatternSyntax)pattern;
-          var right = relationalPattern.Expression.AcceptExpression(this);
-          string token = relationalPattern.OperatorToken.ValueText;
-          return targetExpression.Binary(token, right);
+          return BuildRelationalPatternExpression(targetExpression, (RelationalPatternSyntax)pattern, true);
+        }
+        case SyntaxKind.ParenthesizedPattern: {
+          return BuildPatternExpression(targetExpression, ((ParenthesizedPatternSyntax)pattern).Pattern, targetNode);
         }
         case SyntaxKind.TypePattern: {
           var typePattern = (TypePatternSyntax)pattern;
@@ -1774,6 +1781,96 @@ namespace CSharpLua {
       }
 
       return condition ?? LuaIdentifierLiteralExpressionSyntax.True;
+    }
+
+    // A relational pattern compares numbers, so a value that can be nil or of another type is checked first: C# answers false
+    // there, where Lua's comparison would stop the script. The value is then read twice: when isLocalAllowed, a value that
+    // is not a local is kept in one first.
+    private LuaExpressionSyntax BuildRelationalPatternExpression(LuaExpressionSyntax targetExpression, RelationalPatternSyntax pattern, bool isLocalAllowed) {
+      var operation = semanticModel_.GetOperation(pattern) as IRelationalPatternOperation;
+      var inputType = operation?.InputType;
+      var narrowedType = operation?.NarrowedType;
+      bool isChecked = inputType != null && narrowedType != null && !inputType.EQ(narrowedType);
+      if (isChecked && isLocalAllowed) {
+        targetExpression = GetIdentifierNameFromExpression(targetExpression);
+      }
+      var right = pattern.Expression.AcceptExpression(this);
+      LuaExpressionSyntax condition = targetExpression.Binary(pattern.OperatorToken.ValueText, right);
+      if (isChecked) {
+        LuaExpressionSyntax check = inputType.IsNullableType() && inputType.NullableElementType().EQ(narrowedType)
+          ? targetExpression.NotEquals(LuaIdentifierNameSyntax.Nil)
+          : new LuaInvocationExpressionSyntax(LuaIdentifierNameSyntax.Is, targetExpression, GetTypeName(narrowedType));
+        condition = check.And(condition);
+      }
+      return condition;
+    }
+
+    // The type of the value a pattern tests, as the patterns around it narrowed it.
+    private ITypeSymbol GetPatternInputType(PatternSyntax pattern) {
+      return (semanticModel_.GetOperation(pattern) as IPatternOperation)?.InputType;
+    }
+
+    /// <summary>
+    /// The condition that target, a member read or a deconstructed element, matches a pattern inside a property or
+    /// positional pattern. It is one expression with no statement before it, so the member is read only when the conditions
+    /// before it hold, and read again for each part of the pattern. A variable can be declared only for an element held in a
+    /// local; a variable for a member, or a pattern that needs a statement, stops the compiler with an error.
+    /// </summary>
+    private LuaExpressionSyntax BuildSubpatternExpression(LuaExpressionSyntax target, PatternSyntax pattern) {
+      switch (pattern) {
+        case ConstantPatternSyntax constantPattern: {
+          return target.EqualsEquals(constantPattern.AcceptExpression(this));
+        }
+        case RelationalPatternSyntax relationalPattern: {
+          return BuildRelationalPatternExpression(target, relationalPattern, false);
+        }
+        case DiscardPatternSyntax: {
+          return LuaIdentifierLiteralExpressionSyntax.True;
+        }
+        case ParenthesizedPatternSyntax parenthesizedPattern: {
+          return BuildSubpatternExpression(target, parenthesizedPattern.Pattern);
+        }
+        case UnaryPatternSyntax notPattern: {
+          return BuildSubpatternExpression(target, notPattern.Pattern).Parenthesized().Not();
+        }
+        case BinaryPatternSyntax binaryPattern: {
+          var left = BuildSubpatternExpression(target, binaryPattern.Left);
+          CheckBinaryParenthesized(ref left);
+          var right = BuildSubpatternExpression(target, binaryPattern.Right);
+          CheckBinaryParenthesized(ref right);
+          return binaryPattern.IsKind(SyntaxKind.AndPattern) ? left.And(right) : left.Or(right);
+        }
+        case TypePatternSyntax typePattern: {
+          return BuildIsPatternExpression(GetPatternInputType(pattern), typePattern.Type, target);
+        }
+        case DeclarationPatternSyntax declarationPattern: {
+          AddSubpatternVariable(target, declarationPattern.Designation, pattern);
+          return BuildIsPatternExpression(GetPatternInputType(pattern), declarationPattern.Type, target);
+        }
+        case VarPatternSyntax varPattern: {
+          AddSubpatternVariable(target, varPattern.Designation, pattern);
+          return LuaIdentifierLiteralExpressionSyntax.True;
+        }
+        case RecursivePatternSyntax recursivePattern: {
+          AddSubpatternVariable(target, recursivePattern.Designation, pattern);
+          LuaLocalVariablesSyntax deconstruct = null;
+          return BuildRecursivePatternExpression(recursivePattern, target, ref deconstruct, null);
+        }
+        default: {
+          throw new CompilationErrorException(pattern, $"the pattern '{pattern}' inside a property or positional pattern is not supported");
+        }
+      }
+    }
+
+    private void AddSubpatternVariable(LuaExpressionSyntax target, VariableDesignationSyntax designation, PatternSyntax pattern) {
+      if (designation == null || designation.IsKind(SyntaxKind.DiscardDesignation)) {
+        return;
+      }
+      if (target is LuaIdentifierNameSyntax name and not LuaSymbolNameSyntax && designation.IsKind(SyntaxKind.SingleVariableDesignation)) {
+        AddLocalVariableMapping(name, designation);
+        return;
+      }
+      throw new CompilationErrorException(pattern, $"the variable '{designation}' declared for a member in a property pattern is not supported; match the member in the pattern and read it in the code");
     }
 
     public override LuaSyntaxNode VisitIsPatternExpression(IsPatternExpressionSyntax node) {
