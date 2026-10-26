@@ -581,7 +581,7 @@ namespace CSharpLua {
 
     internal void Render(LuaPrefixUnaryExpressionSyntax node) {
       Write(node.OperatorToken);
-      if (node.ForceWhitespaceAfterOperator || char.IsLetter(node.OperatorToken[^1])) {
+      if (node.ForceWhitespaceAfterOperator || char.IsLetter(node.OperatorToken[^1]) || node.IsMinusBeforeMinus) {
         WriteSpace();
       }
       node.Operand.Render(this);

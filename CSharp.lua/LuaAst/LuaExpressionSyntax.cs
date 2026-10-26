@@ -158,6 +158,27 @@ namespace CSharpLua.LuaAst {
       OperatorToken = operatorToken;
     }
 
+    // A minus before an operand that is written with a minus first would make "--", which starts a comment in Lua: the
+    // negation of a negative constant (-F with const float F = -2f), or - -x.
+    internal bool IsMinusBeforeMinus => OperatorToken == Tokens.Sub && IsWrittenWithMinusFirst(Operand);
+
+    private static bool IsWrittenWithMinusFirst(LuaExpressionSyntax expression) {
+      switch (expression) {
+        case LuaPrefixUnaryExpressionSyntax unary:
+          return unary.OperatorToken == Tokens.Sub;
+        case LuaConstLiteralExpression constLiteral:
+          return IsWrittenWithMinusFirst(constLiteral.Value);
+        case LuaStringLiteralExpressionSyntax or LuaVerbatimStringLiteralExpressionSyntax:
+          return false;
+        case LuaLiteralExpressionSyntax literal:
+          return literal.Text.StartsWith(Tokens.Sub);
+        case LuaBinaryExpressionSyntax binary:
+          return IsWrittenWithMinusFirst(binary.Left);
+        default:
+          return false;
+      }
+    }
+
     internal override void Render(LuaRenderer renderer) {
       renderer.Render(this);
     }
