@@ -16,14 +16,14 @@ namespace CSharpLua.Tests {
       var output = GameScript.RunAfter(GlobalTwice, "LocalFunctionsBeforeDeclaration", "Program");
       Assert.AreEqual(
         "single 5\nglobal 8\nfact 120\nother 1\neven True True\nthrough 31\nabove 6\nabove 8\nbetween 1 7\n"
-        + "lambda 16\nlambda hi\niterator 2\niterator 4\nloop 0:0\nloop 1:100\nblock -5\ngeneric 8 s\nfirst 3\n",
+        + "lambda 16\nlambda hi\niterator 2\niterator 4\nloop 0:0\nloop 1:100\nblock -5\ngeneric 8 s\ninlined 8 10\nfirst 3\n",
         output);
     }
 
     [TestMethod]
     public void TestALocalFunctionDeclaredFirstIsWrittenAsBefore() {
       var lua = GameLuaOutput.Compile("LocalFunctionsBeforeDeclaration");
-      StringAssert.Contains(lua, "local function Three()");
+      Assert.IsTrue(lua.Contains("local function Three()"), lua);
     }
 
     [TestMethod]

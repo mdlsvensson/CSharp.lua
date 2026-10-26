@@ -1558,11 +1558,13 @@ namespace CSharpLua {
         return null;
       }
 
+      // A block is visited again where its method is inlined, so each visit sets the entries anew.
       var definitions = new Dictionary<SyntaxNode, LuaStatementSyntax>();
+      var movedLocals = new HashSet<ILocalSymbol>(SymbolEqualityComparer.Default);
       foreach (var (function, statementIndex) in definedBefore.OrderBy(i => functions[i.Key].Index)) {
         var (symbol, _, node) = functions[function];
         foreach (var name in node.DescendantNodes().OfType<IdentifierNameSyntax>()) {
-          if (semanticModel_.GetSymbolInfo(name).Symbol is ILocalSymbol local && !movedLocalVariables_.ContainsKey(local)) {
+          if (semanticModel_.GetSymbolInfo(name).Symbol is ILocalSymbol local && !movedLocals.Contains(local)) {
             var declaration = local.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
             if (declaration == null || node.Span.Contains(declaration.Span)) {
               continue;
@@ -1579,7 +1581,8 @@ namespace CSharpLua {
               || declaration.Parent?.Parent != declarationStatement || local.IsRef) {
               throw new CompilationErrorException(name, $"the local function '{symbol.Name}' is used above its declaration and uses '{local.Name}', which is declared between them in a way that cannot be moved; declare '{local.Name}' above the first use of '{symbol.Name}'");
             }
-            movedLocalVariables_.Add(local, block);
+            movedLocals.Add(local);
+            movedLocalVariables_[local] = block;
           }
         }
 
@@ -1588,7 +1591,7 @@ namespace CSharpLua {
           list = new LuaStatementListSyntax();
           definitions.Add(statement, list);
         }
-        movedLocalFunctions_.Add(symbol, (LuaStatementListSyntax)list);
+        movedLocalFunctions_[symbol] = (LuaStatementListSyntax)list;
         block.AddHeadVariable(GetLocalMethodName(symbol, node));
       }
       return definitions;

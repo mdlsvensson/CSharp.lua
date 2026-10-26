@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 class Program {
   // The only local function of the method, called above its declaration.
@@ -113,6 +114,16 @@ class Program {
     T Id<T>(T x) => x;
   }
 
+  // Inlined where it is called: its block is written again there.
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  static int Inlined(int x) {
+    int scale = 2;
+    int r = Mul(x);
+    return r;
+
+    int Mul(int v) => v * scale;
+  }
+
   // Declared first: written as before.
   static void DeclaredFirst() {
     int Three() => 3;
@@ -132,6 +143,7 @@ class Program {
     InIterator();
     Nested();
     Generic();
+    Console.WriteLine("inlined " + Inlined(4) + " " + Inlined(5));
     DeclaredFirst();
   }
 }
