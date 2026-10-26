@@ -4867,7 +4867,7 @@ namespace CSharpLua {
       }
 
       if (IsUserDefinedOperator(node, out var methodSymbol)) {
-        if (IsNullableTypeUserDefinedOperator(node, methodSymbol, out var result)) {
+        if (IsLiftedEqualityWithNull(node, methodSymbol, out var result) || IsNullableTypeUserDefinedOperator(node, methodSymbol, out result)) {
           return result;
         }
         return GetUserDefinedOperatorExpression(methodSymbol, node.Left, node.Right);
@@ -4875,6 +4875,26 @@ namespace CSharpLua {
 
       string operatorToken = GetOperatorToken(node.OperatorToken);
       return BuildBinaryExpression(node, operatorToken);
+    }
+
+    // A struct's own == or != against null is lifted, and C# never calls the operator then: the answer is whether the other
+    // side is nil.
+    private bool IsLiftedEqualityWithNull(BinaryExpressionSyntax node, IMethodSymbol methodSymbol, out LuaExpressionSyntax result) {
+      bool isEquals = node.IsKind(SyntaxKind.EqualsExpression);
+      if ((isEquals || node.IsKind(SyntaxKind.NotEqualsExpression)) && methodSymbol.Parameters.Length == 2) {
+        var parameterType = methodSymbol.Parameters[0].Type;
+        if (parameterType.IsValueType && !parameterType.IsNullableType()) {
+          bool IsNull(ExpressionSyntax expression) => semanticModel_.GetConstantValue(expression) is { HasValue: true, Value: null };
+          var other = IsNull(node.Right) ? node.Left : IsNull(node.Left) ? node.Right : null;
+          if (other != null) {
+            var expression = VisitExpression(other);
+            result = isEquals ? expression.EqualsEquals(LuaIdentifierNameSyntax.Nil) : expression.NotEquals(LuaIdentifierNameSyntax.Nil);
+            return true;
+          }
+        }
+      }
+      result = null;
+      return false;
     }
 
     private bool IsNullableTypeUserDefinedOperator(BinaryExpressionSyntax node, IMethodSymbol methodSymbol, out LuaExpressionSyntax result) {
