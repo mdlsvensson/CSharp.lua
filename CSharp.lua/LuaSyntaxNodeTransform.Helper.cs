@@ -17,6 +17,7 @@ limitations under the License.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -520,12 +521,12 @@ namespace CSharpLua {
           case TypeCode.Int64: {
             if (constantValue is long.MinValue) {
               const long kMinInteger = long.MinValue + 1;     // in lua5.4 long.MinValue will be float
-              return new LuaIdentifierLiteralExpressionSyntax($"({kMinInteger} - 1)");
+              return new LuaIdentifierLiteralExpressionSyntax("(" + kMinInteger.ToString(CultureInfo.InvariantCulture) + " - 1)");
             }
             break;
           }
         }
-        return new LuaIdentifierLiteralExpressionSyntax(constantValue.ToString());
+        return new LuaIdentifierLiteralExpressionSyntax(Convert.ToString(constantValue, CultureInfo.InvariantCulture));
       }
 
       return LuaIdentifierLiteralExpressionSyntax.Nil;
@@ -543,7 +544,7 @@ namespace CSharpLua {
       }
 
       var literalExpression = constValue.HasValue
-        ? new LuaIdentifierLiteralExpressionSyntax(constValue.Value.ToString())
+        ? new LuaIdentifierLiteralExpressionSyntax(Convert.ToString(constValue.Value.Value, CultureInfo.InvariantCulture))
         : GetLiteralExpression(constField.ConstantValue);
       string identifierToken = constField.ContainingType.Name + '.' + constField.Name;
       return new LuaConstLiteralExpression(literalExpression, identifierToken);
