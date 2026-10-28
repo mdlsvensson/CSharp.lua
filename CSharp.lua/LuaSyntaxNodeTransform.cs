@@ -1694,6 +1694,10 @@ namespace CSharpLua {
 
     private LuaExpressionSyntax BuildCommonAssignmentExpression(LuaExpressionSyntax left, LuaExpressionSyntax right, string operatorToken, ExpressionSyntax rightNode, ExpressionSyntax parent) {
       bool isPreventDebugConcatenation = IsPreventDebug && operatorToken == LuaSyntaxNode.Tokens.Concatenation;
+      bool isRightParenthesized = rightNode is BinaryExpressionSyntax || rightNode.IsKind(SyntaxKind.ConditionalExpression);
+      if (isRightParenthesized && right is not LuaParenthesizedExpressionSyntax) {
+        right = right.Parenthesized();
+      }
       if (left is LuaPropertyTemplateExpressionSyntax propertyTemplate) {
         var arguments = propertyTemplate.GetArguments(propertyTemplate.GetExpression.Binary(operatorToken, right));
         return BuildCodeTemplateExpression(propertyTemplate.SetTemplate, arguments, propertyTemplate.Name);
@@ -1719,13 +1723,7 @@ namespace CSharpLua {
         if (parent != null) {
           expression = GetUserDefinedOperatorExpression(parent, leftExpression, right);
         }
-        if (expression == null) {
-          bool isRightParenthesized = rightNode is BinaryExpressionSyntax || rightNode.IsKind(SyntaxKind.ConditionalExpression);
-          if (isRightParenthesized) {
-            right = right.Parenthesized();
-          }
-          expression = leftExpression.Binary(operatorToken, right);
-        }
+        expression ??= leftExpression.Binary(operatorToken, right);
         return left.Assignment(expression);
       }
     }
@@ -1733,9 +1731,6 @@ namespace CSharpLua {
     private LuaExpressionSyntax BuildCommonAssignmentExpression(ExpressionSyntax leftNode, ExpressionSyntax rightNode, string operatorToken, ExpressionSyntax parent) {
       var left = VisitExpression(leftNode);
       var right = VisitExpression(rightNode);
-      if (rightNode is BinaryExpressionSyntax) {
-        right = right.Parenthesized();
-      }
       return BuildCommonAssignmentExpression(left, right, operatorToken, rightNode, parent);
     }
 
