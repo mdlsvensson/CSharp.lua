@@ -11,8 +11,8 @@ project references, the NuGet packages folder, lambdas, returns, primary constru
 loops left early, continue inside a switch, fields named as a base class's private field, a float zero made an
 integer in Warcraft III's Lua, numbers written in the culture of the machine, local functions used above their
 declaration, returns after a using declaration, nullable structs compared with null, the negation of a negative constant,
-patterns in a switch statement's case labels and the core's Deg2Rad and Rad2Deg, which were swapped. Each change is in
-the history of the moonwell-package branch.
+patterns in a switch statement's case labels, the core's Deg2Rad and Rad2Deg, which were swapped, and a conditional
+added to an element or a property. Each change is in the history of the moonwell-package branch.
 
 CSharp.lua/CSharp.lua.csproj
 CSharp.lua/Compiler.cs
